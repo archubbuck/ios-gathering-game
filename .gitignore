@@ -1,29 +1,18 @@
-# dependencies
-/node_modules
+# build output
+.build/
+DerivedData/
 
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# env
-.env
-.env*.local
+# Xcode user state
+xcuserdata/
+*.xcuserstate
 
 # misc
 .DS_Store
-*.pem
-npm-debug.log*
 
 # signing secrets — never commit private keys, certs, or provisioning profiles
 *.key
 *.cer
 *.csr
 *.mobileprovision
-.p8
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+*.p8
+*.pem

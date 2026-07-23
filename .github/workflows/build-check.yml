@@ -1,0 +1,41 @@
+name: Build Check
+
+# Compiles the app for the iOS Simulator (no signing) on every push.
+# This is the primary feedback loop: development happens on a non-Mac
+# machine, so this workflow is the only compiler in the loop.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'SylvanCraft.swiftpm/**'
+      - '.github/workflows/build-check.yml'
+  pull_request:
+    paths:
+      - 'SylvanCraft.swiftpm/**'
+      - '.github/workflows/build-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show available schemes (diagnostic)
+        working-directory: SylvanCraft.swiftpm
+        run: xcodebuild -list || true
+
+      - name: Build for iOS Simulator (no signing)
+        working-directory: SylvanCraft.swiftpm
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme SylvanCraft \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY=""

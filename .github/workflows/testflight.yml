@@ -15,10 +15,6 @@ name: TestFlight
 #   DIST_PROFILE_BASE64  — base64 of App Store .mobileprovision file
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'YourApp.swiftpm/**'
   workflow_dispatch:
 
 permissions:
@@ -36,7 +32,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           sed -i '' "s/teamIdentifier: \"\"/teamIdentifier: \"${APPLE_TEAM_ID}\"/" \
-            YourApp.swiftpm/Package.swift
+            SylvanCraft.swiftpm/Package.swift
 
       - name: Install distribution certificate & key
         id: signing
@@ -105,15 +101,15 @@ jobs:
           security set-keychain-settings -lut 7200 build.keychain
 
       - name: Archive app
-        working-directory: YourApp.swiftpm
+        working-directory: SylvanCraft.swiftpm
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           xcodebuild archive \
-            -scheme YourApp \
+            -scheme SylvanCraft \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -archivePath "${GITHUB_WORKSPACE}/.build/YourApp.xcarchive" \
+            -archivePath "${GITHUB_WORKSPACE}/.build/SylvanCraft.xcarchive" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="${{ steps.signing.outputs.identity }}" \
             PROVISIONING_PROFILE="${{ steps.profile.outputs.profile_uuid }}" \
@@ -148,7 +144,7 @@ jobs:
               <string>${{ steps.signing.outputs.identity }}</string>
               <key>provisioningProfiles</key>
               <dict>
-                  <key>com.example.yourapp</key>
+                  <key>com.adamchubbuck.sylvancraft</key>
                   <string>${{ steps.profile.outputs.profile_uuid }}</string>
               </dict>
           </dict>
@@ -156,7 +152,7 @@ jobs:
           PLIST
 
           xcodebuild -exportArchive \
-            -archivePath .build/YourApp.xcarchive \
+            -archivePath .build/SylvanCraft.xcarchive \
             -exportOptionsPlist .build/exportOptions.plist \
             -exportPath .build/output \
             -authenticationKeyID "${{ secrets.APPLE_KEY_ID }}" \
