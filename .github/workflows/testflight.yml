@@ -115,7 +115,8 @@ jobs:
             PROVISIONING_PROFILE="${{ steps.profile.outputs.profile_uuid }}" \
             DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
             OTHER_CODE_SIGN_FLAGS="--timestamp" \
-            INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO
+            INFOPLIST_KEY_ITSAppUsesNonExemptEncryption=NO \
+            INFOPLIST_KEY_CFBundleIconName=AppIcon
 
       - name: Export & upload to App Store Connect
         env:
