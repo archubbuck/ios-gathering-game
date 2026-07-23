@@ -100,6 +100,11 @@ jobs:
           security unlock-keychain -p "${{ steps.signing.outputs.keychain_password }}" build.keychain
           security set-keychain-settings -lut 7200 build.keychain
 
+      - name: Strip alpha channel from AppIcon
+        run: |
+          ICON="SylvanCraft.swiftpm/AppModule/Assets.xcassets/AppIcon.appiconset/AppIcon.png"
+          sips -s format png --deleteTag alpha "${ICON}" --out "${ICON}"
+
       - name: Archive app
         working-directory: SylvanCraft.swiftpm
         env:
