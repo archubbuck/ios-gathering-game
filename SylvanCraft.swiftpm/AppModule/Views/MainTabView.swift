@@ -13,7 +13,7 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            PlaceholderScreen(title: "Forest", subtitle: "Chop trees, gain XP")
+            DebugCoreView()
                 .tabItem { Label("Forest", systemImage: "tree") }
                 .tag(AppTab.forest)
 
@@ -53,6 +53,85 @@ struct PlaceholderScreen: View {
                     .font(.body)
                     .foregroundStyle(SylvanTheme.textOnParchmentSecondary)
             }
+        }
+    }
+}
+
+/// Phase 1 scaffolding: exercises GameState end-to-end (chop ticks, XP,
+/// gold, selling, persistence) before the real forest screen exists.
+/// Replaced by ForestView in Phase 2.
+struct DebugCoreView: View {
+    @EnvironmentObject private var game: GameState
+
+    var body: some View {
+        ZStack {
+            SylvanTheme.parchment.ignoresSafeArea()
+            VStack(spacing: 16) {
+                Text(game.region.name)
+                    .font(.display(28))
+                    .foregroundStyle(SylvanTheme.textOnParchment)
+
+                let progress = XPTable.progressToNext(xp: game.totalXP)
+                VStack(spacing: 4) {
+                    Text("Level \(game.level)")
+                        .font(.display(22))
+                    ProgressView(value: progress.fraction)
+                        .tint(SylvanTheme.forestGreen)
+                    Text("\(Int(game.totalXP)) XP · \(game.gold) gp · pack \(game.packCount)/28")
+                        .font(.stat(15))
+                }
+                .foregroundStyle(SylvanTheme.textOnParchment)
+                .padding(.horizontal, 32)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(game.trees) { tree in
+                        Button {
+                            game.tapTree(tree.id)
+                        } label: {
+                            HStack {
+                                Text(tree.species.displayName)
+                                Spacer()
+                                if game.activeChopTreeID == tree.id {
+                                    Text("chopping...")
+                                } else if tree.isDepleted {
+                                    Text("regrowing")
+                                } else {
+                                    Text("\(tree.logsRemaining) logs")
+                                }
+                            }
+                            .font(.stat(15))
+                            .padding(10)
+                            .background(SylvanTheme.parchmentLight, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 32)
+
+                HStack(spacing: 12) {
+                    Button("Tick") { game.performChopTick() }
+                    Button("Sell all") { game.sellAllLogs() }
+                    Button("+500 XP") { game.debugAddXP(500) }
+                    Button("+100 gp") { game.debugAddGold(100) }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(SylvanTheme.forestGreen)
+                .font(.stat(13))
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 3) {
+                        ForEach(game.eventLog.suffix(8).reversed()) { entry in
+                            Text(entry.text)
+                                .font(.stat(12, weight: .regular))
+                                .foregroundStyle(SylvanTheme.textOnParchmentSecondary)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 140)
+                .padding(.horizontal, 32)
+            }
+            .padding(.vertical)
         }
     }
 }
