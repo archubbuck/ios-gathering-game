@@ -1,0 +1,49 @@
+name: Release Swift Playgrounds App
+
+# Publishes YourApp.swiftpm as a downloadable zip attached to a GitHub
+# Release, so it can be grabbed and opened directly in Swift Playgrounds
+# without cloning the repo.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to publish (e.g. v1.0.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Package.swift ships with a blank teamIdentifier placeholder (§0.1 of
+      # the implementation plan) since it's normally filled in per-developer
+      # by Swift Playgrounds' Project Settings. Baking the real team ID into
+      # the published release means anyone downloading it skips that step
+      # (and the ASAuthorizationError 1000 / missing-provisioning failures
+      # that follow from leaving it blank).
+      - name: Set Apple Developer Team Identifier
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::error::APPLE_TEAM_ID repository secret is not set (Settings > Secrets and variables > Actions)"
+            exit 1
+          fi
+          sed -i "s/teamIdentifier: \"\"/teamIdentifier: \"${APPLE_TEAM_ID}\"/" YourApp.swiftpm/Package.swift
+
+      - name: Zip YourApp.swiftpm
+        run: zip -r YourApp.swiftpm.zip YourApp.swiftpm
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: YourApp.swiftpm.zip
+          generate_release_notes: true

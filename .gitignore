@@ -1,0 +1,29 @@
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# env
+.env
+.env*.local
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# signing secrets — never commit private keys, certs, or provisioning profiles
+*.key
+*.cer
+*.csr
+*.mobileprovision
+.p8
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

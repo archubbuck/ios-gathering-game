@@ -1,0 +1,36 @@
+name: Database Migration
+
+# §0 of the implementation plan is explicit: migrations run "manually/via
+# CI against the direct connection string — not run automatically on
+# deploy, to avoid a schema migration accidentally firing on every Vercel
+# preview build." This workflow is that CI path — deliberately decoupled
+# from Vercel's own git-triggered deploys, and scoped to main (production)
+# only, never preview branches/PRs.
+#
+# Requires a DATABASE_URL_UNPOOLED repository secret (Neon's direct,
+# unpooled connection string — migrations need session-level guarantees
+# pooled/PgBouncer connections don't give, same as npm run migrate:up
+# locally). Add it under Settings > Secrets and variables > Actions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'migrations/**'
+  workflow_dispatch: {}
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run migrate:up
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
