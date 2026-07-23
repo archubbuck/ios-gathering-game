@@ -512,23 +512,6 @@ final class GameState: ObservableObject {
         scheduleSave()
     }
 
-    // MARK: Persistence
-
-    private var snapshot: PlayerSave {
-        PlayerSave(
-            schemaVersion: SaveManager.currentSchemaVersion,
-            totalXP: totalXP,
-            gold: gold,
-            inventory: inventory,
-            bank: bank,
-            ownedAxes: ownedAxes,
-            equippedAxe: equippedAxe,
-            playerPosition: player.position,
-            stats: stats,
-            unlockedAchievements: unlockedAchievements
-        )
-    }
-
     // MARK: Achievements
 
     private func checkAchievements() {

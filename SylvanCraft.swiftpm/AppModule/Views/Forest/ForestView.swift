@@ -100,8 +100,6 @@ struct ForestView: View {
     private func visibleTrees(in size: CGSize) -> [WorldTreeState] {
         let cam = game.camera.center
         let pad: CGFloat = 300
-        let halfW = size.width / 2 + pad
-        let halfH = size.height / 2 + pad
         return game.worldTrees.filter { tree in
             let sx = (tree.worldPosition.x - cam.x) + size.width / 2
             let sy = (tree.worldPosition.y - cam.y) + size.height / 2

@@ -11,10 +11,10 @@ final class ChopEngine: ObservableObject {
 
     func attach(to game: GameState) {
         guard chopObservation == nil else { return }
-        chopObservation = game.$activeChopTreeID
+        chopObservation = game.$activeChopTreeKey
             .map { $0 != nil }
             .removeDuplicates()
-            .sink { [weak self, weak game] chopping in
+            .sink { [weak self, weak game] (chopping: Bool) in
                 guard let self else { return }
                 if chopping {
                     self.tickSub = Timer.publish(

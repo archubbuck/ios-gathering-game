@@ -81,6 +81,7 @@ enum PlayerAnimation: String, Codable {
 /// The player character in world space.
 struct PlayerState: Codable {
     var position: CGPoint  // world-space coordinates
+    var velocity: CGPoint = .zero  // drag-driven movement speed
     var facing: PlayerFacing = .right
     var animation: PlayerAnimation = .idle
 

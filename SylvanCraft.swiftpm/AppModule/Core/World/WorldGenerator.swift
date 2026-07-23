@@ -39,8 +39,8 @@ enum WorldGenerator {
 
             for treeIdx in 0..<treeCount {
                 // Scatter trees around the cluster center.
-                let angle = rng.next() * .pi * 2
-                let radius = rng.next() * 140 + 20
+                let angle = rng.nextCGFloat() * .pi * 2
+                let radius = rng.nextCGFloat() * 140 + 20
                 let tx = center.x + cos(angle) * radius
                 let ty = center.y + sin(angle) * radius
 
@@ -89,7 +89,7 @@ enum WorldGenerator {
             weights.append(w)
             total += w
         }
-        var roll = rng.next() * total
+        var roll = rng.nextCGFloat() * total
         for (i, w) in weights.enumerated() {
             roll -= w
             if roll <= 0 { return eligible[i] }
@@ -103,8 +103,8 @@ enum WorldGenerator {
                                           existingCenters: [CGPoint]) -> CGPoint {
         let margin: CGFloat = 60
         for _ in 0..<50 {
-            let x = rng.next() * (size.width - margin * 2) + margin
-            let y = rng.next() * (size.height - margin * 2) + margin
+            let x = rng.nextCGFloat() * (size.width - margin * 2) + margin
+            let y = rng.nextCGFloat() * (size.height - margin * 2) + margin
             let point = CGPoint(x: x, y: y)
             let tooClose = existingCenters.contains { existing in
                 hypot(existing.x - point.x, existing.y - point.y) < GameData.clusterMinSeparation
@@ -113,8 +113,8 @@ enum WorldGenerator {
         }
         // Fallback: just pick something.
         return CGPoint(
-            x: rng.next() * (size.width - margin * 2) + margin,
-            y: rng.next() * (size.height - margin * 2) + margin
+            x: rng.nextCGFloat() * (size.width - margin * 2) + margin,
+            y: rng.nextCGFloat() * (size.height - margin * 2) + margin
         )
     }
 }
@@ -122,16 +122,29 @@ enum WorldGenerator {
 // MARK: - SeededRandom (extracted from MapView.swift)
 
 /// Deterministic pseudo-random stream for reproducible world generation.
-struct SeededRandom {
+struct SeededRandom: RandomNumberGenerator {
     private var state: UInt64
 
     init(seed: UInt64) {
         state = seed &* 0x9E3779B97F4A7C15 &+ 1
     }
 
-    mutating func next() -> CGFloat {
+    /// `RandomNumberGenerator` conformance — returns a UInt64.
+    mutating func next() -> UInt64 {
         state = state &* 6364136223846793005 &+ 1442695040888963407
-        return CGFloat((state >> 33) % 10_000) / 10_000
+        // Use the full state; rotate for good distribution.
+        var x = state
+        x ^= x >> 33
+        x &*= 0xFF51AFD7ED558CCD
+        x ^= x >> 33
+        x &*= 0xC4CEB9FE1A85EC53
+        x ^= x >> 33
+        return x
+    }
+
+    /// Convenience: returns a CGFloat in [0, 1).
+    mutating func nextCGFloat() -> CGFloat {
+        CGFloat(next() >> 11) / CGFloat(UInt64.max >> 11)
     }
 }
 
@@ -139,6 +152,6 @@ extension Int {
     /// Random integer in range using SeededRandom.
     init(randomIn range: ClosedRange<Int>, using rng: inout SeededRandom) {
         let count = range.upperBound - range.lowerBound + 1
-        self = range.lowerBound + Int(rng.next() * CGFloat(count))
+        self = range.lowerBound + Int(rng.nextCGFloat() * CGFloat(count))
     }
 }
