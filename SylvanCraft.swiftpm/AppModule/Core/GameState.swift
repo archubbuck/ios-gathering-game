@@ -4,37 +4,49 @@ import SwiftUI
 /// root; every screen reads and mutates through it.
 @MainActor
 final class GameState: ObservableObject {
+    // MARK: Core progression (unchanged)
     @Published private(set) var totalXP: Double
     @Published private(set) var gold: Int
     @Published private(set) var inventory: [TreeSpecies?]
     @Published private(set) var bank: [ItemStack]
     @Published private(set) var ownedAxes: Set<AxeTier>
     @Published private(set) var equippedAxe: AxeTier
-    @Published private(set) var currentRegionID: String
-    @Published private(set) var trees: [TreeState]
     @Published private(set) var stats: LifetimeStats
     @Published private(set) var unlockedAchievements: Set<String>
     @Published private(set) var eventLog: [EventLogEntry] = []
-    @Published private(set) var activeChopTreeID: Int?
     @Published var lastXPDrop: XPDrop?
 
+    // MARK: World & player (new)
+    @Published var player: PlayerState
+    @Published var camera = Camera(center: .zero)
+    @Published private(set) var worldTrees: [WorldTreeState] = []
+    @Published private(set) var loadedChunks: Set<ChunkCoord> = []
+
+    /// The tree currently being chopped, if any.
+    @Published private(set) var activeChopTreeKey: String?
+
+    /// Distance traveled since last snapshot (for wanderer achievement).
+    private var farthestDistanceFromOrigin: Double = 0
+
     private var saveTask: Task<Void, Never>?
-    private var respawnTasks: [Int: Task<Void, Never>] = [:]
+    private var updateLink: CADisplayLink?
+    private var lastUpdateTime: CFTimeInterval = 0
+    private var lastChopTickTime: CFTimeInterval = 0
+    private var respawnTasks: [String: Task<Void, Never>] = [:]
 
     // MARK: Derived
 
     var level: Int { XPTable.level(for: totalXP) }
-    var region: RegionDef { GameData.region(id: currentRegionID) }
     var packCount: Int { inventory.compactMap { $0 }.count }
     var packIsFull: Bool { !inventory.contains(nil) }
-    var isChopping: Bool { activeChopTreeID != nil }
+    var isChopping: Bool { activeChopTreeKey != nil }
 
     var achievementContext: AchievementContext {
         AchievementContext(
             stats: stats,
             level: level,
             ownedAxes: ownedAxes,
-            totalRegionCount: GameData.regions.count
+            maxDistanceFromOrigin: farthestDistanceFromOrigin
         )
     }
 
@@ -48,70 +60,205 @@ final class GameState: ObservableObject {
         bank = save.bank
         ownedAxes = save.ownedAxes
         equippedAxe = save.equippedAxe
-        currentRegionID = save.currentRegionID
         stats = save.stats
         unlockedAchievements = save.unlockedAchievements
-        trees = Self.spawnTrees(for: GameData.region(id: save.currentRegionID))
-        recordEvent(.info, "Welcome to \(GameData.region(id: save.currentRegionID).name).")
+
+        // Restore or create player at saved position.
+        let pos = save.playerPosition
+        player = PlayerState(position: pos, facing: .right)
+        farthestDistanceFromOrigin = hypot(pos.x, pos.y)
+
+        // Generate initial chunks around the player.
+        worldTrees = ChunkManager.generateInitial(around: pos)
+        loadedChunks = ChunkManager.loadedChunkSet(around: pos)
+
+        // Snap camera to player (no lerp on init).
+        camera.snap(to: pos)
+
+        recordEvent(.info, "Welcome to Sylvan Craft. Drag to explore the forest.")
+
+        // Start the 60 fps update loop.
+        lastUpdateTime = CACurrentMediaTime()
+        updateLink = CADisplayLink(target: self, selector: #selector(onFrame))
+        updateLink?.add(to: .main, forMode: .common)
     }
 
-    private static func spawnTrees(for region: RegionDef) -> [TreeState] {
-        region.slots.enumerated().map { index, slot in
-            let def = GameData.tree(for: slot.species)
-            return TreeState(
-                slotIndex: index,
-                species: slot.species,
-                logsRemaining: Int.random(in: def.logsMin...def.logsMax),
-                respawnUntil: nil
-            )
+    deinit {
+        updateLink?.invalidate()
+    }
+
+    // MARK: Per-frame update (movement + proximity chopping)
+
+    @objc private func onFrame(_ link: CADisplayLink) {
+        let now = CACurrentMediaTime()
+        let dt = CGFloat(now - lastUpdateTime)
+        lastUpdateTime = now
+        guard dt > 0, dt < 0.1 else { return } // guard against huge jumps
+
+        // --- Movement ---
+        let speed = GameData.playerWalkSpeed
+        var moved = false
+
+        if player.velocity.x != 0 || player.velocity.y != 0 {
+            // Normalize to prevent diagonal speed boost.
+            let mag = hypot(player.velocity.x, player.velocity.y)
+            let nx = mag > 0.001 ? player.velocity.x / mag : 0
+            let ny = mag > 0.001 ? player.velocity.y / mag : 0
+
+            player.position.x += nx * speed * dt
+            player.position.y += ny * speed * dt
+
+            // Update facing based on horizontal movement.
+            if nx > 0.01 { player.facing = .right }
+            else if nx < -0.01 { player.facing = .left }
+
+            // Track farthest distance.
+            let dist = hypot(player.position.x, player.position.y)
+            if dist > farthestDistanceFromOrigin {
+                farthestDistanceFromOrigin = dist
+            }
+
+            moved = true
+            player.animation = .walking
+            player.dwellStart = nil
+            player.dwellTargetKey = nil
+
+            // Stop chopping if we moved away.
+            if isChopping {
+                stopChopping()
+            }
+        } else {
+            player.animation = isChopping ? .chopping : .idle
         }
+
+        // --- Chunk loading ---
+        let newChunks = ChunkManager.loadedChunkSet(around: player.position)
+        if newChunks != loadedChunks {
+            let added = newChunks.subtracting(loadedChunks)
+            for coord in added {
+                let chunk = WorldGenerator.generateChunk(coord: coord)
+                worldTrees.append(contentsOf: chunk.trees)
+            }
+            // Unload far chunks.
+            let removed = loadedChunks.subtracting(newChunks)
+            if !removed.isEmpty {
+                let removedKeys = Set(removed.flatMap { coord in
+                    worldTrees.filter { $0.key.hasPrefix("\(coord.x):\(coord.y):") }.map(\.key)
+                })
+                worldTrees.removeAll { removedKeys.contains($0.key) }
+            }
+            loadedChunks = newChunks
+        }
+
+        // Refresh respawned trees.
+        refreshAllRespawning()
+
+        // --- Proximity chopping ---
+        tickProximityChopping(now: now, dt: dt, moved: moved)
+
+        // --- Camera follow ---
+        camera.follow(target: player.position)
+
+        // --- Auto-save periodically ---
+        scheduleSave()
     }
 
-    // MARK: Chopping
+    // MARK: Proximity chopping
 
-    /// Tap intent from the forest: start chopping a tree, or stop if it
-    /// is already the active one.
-    func tapTree(_ id: Int) {
-        guard trees.indices.contains(id) else { return }
-        if activeChopTreeID == id {
-            stopChopping()
+    private func tickProximityChopping(now: CFTimeInterval, dt: CGFloat, moved: Bool) {
+        // If already chopping, just run chop ticks.
+        if let key = activeChopTreeKey, let idx = worldTrees.firstIndex(where: { $0.key == key }) {
+            // Check if player moved too far from the active tree.
+            let tree = worldTrees[idx]
+            let dist = hypot(tree.worldPosition.x - player.position.x,
+                             tree.worldPosition.y - player.position.y)
+            if dist > GameData.proximityRadius * 1.5 {
+                stopChopping()
+                return
+            }
+            // Run chop ticks on interval.
+            if now - lastChopTickTime >= GameData.tickInterval {
+                lastChopTickTime = now
+                performChopTick()
+            }
             return
         }
-        refreshRespawn(at: id)
-        let tree = trees[id]
+
+        // Not chopping — check for nearby trees.
+        guard !packIsFull else { return }
+
+        // Find the nearest eligible tree within proximity radius.
+        var best: (key: String, dist: CGFloat, species: TreeSpecies)? = nil
+        for tree in worldTrees {
+            guard !tree.isDepleted, tree.logsRemaining > 0 else { continue }
+            let def = GameData.tree(for: tree.species)
+            guard level >= def.levelReq else { continue }
+            let dist = hypot(tree.worldPosition.x - player.position.x,
+                             tree.worldPosition.y - player.position.y)
+            guard dist <= GameData.proximityRadius else { continue }
+            if best == nil || dist < best!.dist {
+                best = (tree.key, dist, tree.species)
+            }
+        }
+
+        guard let best else {
+            // No tree nearby — reset dwell.
+            player.dwellStart = nil
+            player.dwellTargetKey = nil
+            return
+        }
+
+        // Check if dwelling on the same tree.
+        if player.dwellTargetKey == best.key {
+            if let start = player.dwellStart,
+               Date().timeIntervalSince(start) >= GameData.dwellDuration
+            {
+                // Begin chopping!
+                startChopping(treeKey: best.key, species: best.species)
+            }
+        } else {
+            // New tree entered range — start dwell timer.
+            player.dwellTargetKey = best.key
+            player.dwellStart = Date()
+        }
+    }
+
+    private func startChopping(treeKey: String, species: TreeSpecies) {
+        guard let idx = worldTrees.firstIndex(where: { $0.key == treeKey }) else { return }
+        let tree = worldTrees[idx]
         let def = GameData.tree(for: tree.species)
-        guard level >= def.levelReq else {
-            recordEvent(.warning, "You need level \(def.levelReq) to chop \(def.species.displayName).")
-            Haptics.reject()
-            return
-        }
-        guard !tree.isDepleted else {
-            recordEvent(.info, "That tree is regrowing.")
-            return
-        }
-        guard !packIsFull else {
-            recordEvent(.warning, "Your pack is full.")
-            Haptics.reject()
-            return
-        }
-        activeChopTreeID = id
+        guard !tree.isDepleted, !packIsFull, level >= def.levelReq else { return }
+
+        activeChopTreeKey = treeKey
+        player.animation = .chopping
+        lastChopTickTime = CACurrentMediaTime()
         recordEvent(.info, "You swing your \(GameData.axe(for: equippedAxe).tier.displayName.lowercased()) axe at the \(def.species.displayName.lowercased())...")
     }
 
     func stopChopping() {
-        activeChopTreeID = nil
+        activeChopTreeKey = nil
+        if player.animation == .chopping {
+            player.animation = .idle
+        }
+        player.dwellStart = nil
+        player.dwellTargetKey = nil
     }
 
-    /// One 0.6s chop attempt, driven by ChopEngine while chopping.
+    /// One chop attempt. Same core logic as before, but world-tree aware.
     func performChopTick() {
-        guard let index = activeChopTreeID, trees.indices.contains(index) else {
+        guard let key = activeChopTreeKey,
+              let idx = worldTrees.firstIndex(where: { $0.key == key })
+        else {
             stopChopping()
             return
         }
-        refreshRespawn(at: index)
-        var tree = trees[index]
+
+        var tree = worldTrees[idx]
+        let def = GameData.tree(for: tree.species)
+
         guard !tree.isDepleted, tree.logsRemaining > 0 else {
-            retargetOrStop(avoiding: index)
+            stopChopping()
+            retargetNearby()
             return
         }
         guard !packIsFull else {
@@ -121,7 +268,6 @@ final class GameState: ObservableObject {
             return
         }
 
-        let def = GameData.tree(for: tree.species)
         let axe = GameData.axe(for: equippedAxe)
         let chance = ChopMath.successChance(level: level, tree: def, axe: axe)
         guard Double.random(in: 0..<1) < chance else { return }
@@ -134,59 +280,70 @@ final class GameState: ObservableObject {
         tree.logsRemaining -= 1
         if tree.logsRemaining <= 0 {
             tree.respawnUntil = Date().addingTimeInterval(def.respawnSeconds)
-            trees[index] = tree
+            worldTrees[idx] = tree
             recordEvent(.info, "The \(def.species.displayName.lowercased()) tree falls.")
             Haptics.thud()
-            scheduleRespawnRefresh(at: index, after: def.respawnSeconds)
-            retargetOrStop(avoiding: index)
+            scheduleRespawnRefresh(for: key, after: def.respawnSeconds)
+            stopChopping()
+            retargetNearby()
         } else {
-            trees[index] = tree
+            worldTrees[idx] = tree
         }
 
         checkAchievements()
         scheduleSave()
     }
 
-    /// After a tree falls, keep the idle loop going on the nearest
-    /// available tree of the same species; stop if none.
-    private func retargetOrStop(avoiding index: Int) {
-        guard trees.indices.contains(index) else {
-            stopChopping()
-            return
-        }
-        let species = trees[index].species
-        for i in trees.indices where i != index {
-            refreshRespawn(at: i)
-            if trees[i].species == species, !trees[i].isDepleted, trees[i].logsRemaining > 0 {
-                activeChopTreeID = i
-                return
+    /// After a tree falls, find the nearest available tree of any species.
+    private func retargetNearby() {
+        var best: (key: String, dist: CGFloat)? = nil
+        for tree in worldTrees {
+            guard !tree.isDepleted, tree.logsRemaining > 0 else { continue }
+            guard level >= GameData.tree(for: tree.species).levelReq else { continue }
+            let dist = hypot(tree.worldPosition.x - player.position.x,
+                             tree.worldPosition.y - player.position.y)
+            guard dist <= GameData.proximityRadius * 1.35 else { continue }
+            if best == nil || dist < best!.dist {
+                best = (tree.key, dist)
             }
         }
-        stopChopping()
-    }
-
-    /// Refreshes the tree state shortly after its respawn passes, so the
-    /// stump visually regrows without waiting for a tap or tick. Stale
-    /// tasks after travel are harmless: freshly spawned trees have no
-    /// respawn date, so the refresh is a no-op.
-    private func scheduleRespawnRefresh(at index: Int, after delay: TimeInterval) {
-        respawnTasks[index]?.cancel()
-        respawnTasks[index] = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64((delay + 0.1) * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            self?.refreshRespawn(at: index)
+        if let best {
+            // Begin dwell phase on the new tree.
+            player.dwellTargetKey = best.key
+            player.dwellStart = Date()
         }
     }
 
-    /// If a depleted tree's respawn timer has passed, refill it.
-    private func refreshRespawn(at index: Int) {
-        guard trees.indices.contains(index) else { return }
-        var tree = trees[index]
+    // MARK: Respawn helpers
+
+    private func scheduleRespawnRefresh(for key: String, after delay: TimeInterval) {
+        respawnTasks[key]?.cancel()
+        respawnTasks[key] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((delay + 0.1) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.refreshRespawn(for: key)
+        }
+    }
+
+    private func refreshRespawn(for key: String) {
+        guard let idx = worldTrees.firstIndex(where: { $0.key == key }) else { return }
+        var tree = worldTrees[idx]
         if let until = tree.respawnUntil, until <= Date() {
             let def = GameData.tree(for: tree.species)
             tree.respawnUntil = nil
             tree.logsRemaining = Int.random(in: def.logsMin...def.logsMax)
-            trees[index] = tree
+            worldTrees[idx] = tree
+        }
+    }
+
+    private func refreshAllRespawning() {
+        let now = Date()
+        for i in worldTrees.indices {
+            if let until = worldTrees[i].respawnUntil, until <= now {
+                let def = GameData.tree(for: worldTrees[i].species)
+                worldTrees[i].respawnUntil = nil
+                worldTrees[i].logsRemaining = Int.random(in: def.logsMin...def.logsMax)
+            }
         }
     }
 
@@ -355,24 +512,21 @@ final class GameState: ObservableObject {
         scheduleSave()
     }
 
-    // MARK: Travel
+    // MARK: Persistence
 
-    func travel(to regionID: String) {
-        let destination = GameData.region(id: regionID)
-        guard destination.id != currentRegionID else { return }
-        guard level >= destination.levelReq else {
-            recordEvent(.warning, "You need level \(destination.levelReq) to enter \(destination.name).")
-            Haptics.reject()
-            return
-        }
-        stopChopping()
-        currentRegionID = destination.id
-        trees = Self.spawnTrees(for: destination)
-        stats.regionsVisited.insert(destination.id)
-        recordEvent(.info, "You arrive in \(destination.name).")
-        Haptics.thud()
-        checkAchievements()
-        scheduleSave()
+    private var snapshot: PlayerSave {
+        PlayerSave(
+            schemaVersion: SaveManager.currentSchemaVersion,
+            totalXP: totalXP,
+            gold: gold,
+            inventory: inventory,
+            bank: bank,
+            ownedAxes: ownedAxes,
+            equippedAxe: equippedAxe,
+            playerPosition: player.position,
+            stats: stats,
+            unlockedAchievements: unlockedAchievements
+        )
     }
 
     // MARK: Achievements
@@ -408,7 +562,7 @@ final class GameState: ObservableObject {
             bank: bank,
             ownedAxes: ownedAxes,
             equippedAxe: equippedAxe,
-            currentRegionID: currentRegionID,
+            playerPosition: player.position,
             stats: stats,
             unlockedAchievements: unlockedAchievements
         )
@@ -438,12 +592,18 @@ final class GameState: ObservableObject {
         bank = fresh.bank
         ownedAxes = fresh.ownedAxes
         equippedAxe = fresh.equippedAxe
-        currentRegionID = fresh.currentRegionID
         stats = fresh.stats
         unlockedAchievements = fresh.unlockedAchievements
-        trees = Self.spawnTrees(for: GameData.region(id: fresh.currentRegionID))
+
+        player = PlayerState(position: .zero, facing: .right)
+        farthestDistanceFromOrigin = 0
+        camera.snap(to: .zero)
+
+        worldTrees = ChunkManager.generateInitial(around: .zero)
+        loadedChunks = ChunkManager.loadedChunkSet(around: .zero)
+
         eventLog = []
-        recordEvent(.info, "A fresh start. Welcome to \(region.name).")
+        recordEvent(.info, "A fresh start. Welcome to the forest.")
         saveNow()
     }
 

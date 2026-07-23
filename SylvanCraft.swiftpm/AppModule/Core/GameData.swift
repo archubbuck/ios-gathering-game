@@ -65,70 +65,46 @@ enum GameData {
         return def
     }
 
-    // MARK: Regions
+    // MARK: World generation
 
-    static let startingRegionID = "birchwood-glade"
+    /// World-space dimensions of one chunk (square, in points).
+    static let chunkSize: CGFloat = 1200
+    /// Number of chunks loaded around the player (radius). 3 → 7×7 grid.
+    static let chunkLoadRadius = 3
+    /// Trees per cluster in a chunk.
+    static let treesPerClusterRange = 3...7
+    /// Minimum separation between cluster centers (world units).
+    static let clusterMinSeparation: CGFloat = 320
+    /// Cluster centers per chunk.
+    static let clustersPerChunk = 4
 
-    static let regions: [RegionDef] = [
-        RegionDef(
-            id: "birchwood-glade", name: "Birchwood Glade", levelReq: 1,
-            slots: [
-                TreeSlot(species: .birch, position: CGPoint(x: 0.28, y: 0.30), scale: 0.80),
-                TreeSlot(species: .birch, position: CGPoint(x: 0.72, y: 0.34), scale: 0.85),
-                TreeSlot(species: .birch, position: CGPoint(x: 0.30, y: 0.62), scale: 1.00),
-                TreeSlot(species: .birch, position: CGPoint(x: 0.70, y: 0.68), scale: 1.05),
-            ]
-        ),
-        RegionDef(
-            id: "oak-vale", name: "Oak Vale", levelReq: 15,
-            slots: [
-                TreeSlot(species: .oak, position: CGPoint(x: 0.25, y: 0.32), scale: 0.82),
-                TreeSlot(species: .oak, position: CGPoint(x: 0.68, y: 0.28), scale: 0.78),
-                TreeSlot(species: .oak, position: CGPoint(x: 0.65, y: 0.64), scale: 1.05),
-                TreeSlot(species: .birch, position: CGPoint(x: 0.28, y: 0.66), scale: 1.00),
-            ]
-        ),
-        RegionDef(
-            id: "willow-wetlands", name: "Willow Wetlands", levelReq: 30,
-            slots: [
-                TreeSlot(species: .willow, position: CGPoint(x: 0.30, y: 0.28), scale: 0.80),
-                TreeSlot(species: .willow, position: CGPoint(x: 0.74, y: 0.36), scale: 0.88),
-                TreeSlot(species: .willow, position: CGPoint(x: 0.32, y: 0.64), scale: 1.02),
-                TreeSlot(species: .oak, position: CGPoint(x: 0.70, y: 0.68), scale: 1.05),
-            ]
-        ),
-        RegionDef(
-            id: "evergreen-reach", name: "Evergreen Reach", levelReq: 45,
-            slots: [
-                TreeSlot(species: .evergreen, position: CGPoint(x: 0.26, y: 0.30), scale: 0.80),
-                TreeSlot(species: .evergreen, position: CGPoint(x: 0.70, y: 0.30), scale: 0.84),
-                TreeSlot(species: .evergreen, position: CGPoint(x: 0.68, y: 0.66), scale: 1.05),
-                TreeSlot(species: .willow, position: CGPoint(x: 0.30, y: 0.68), scale: 1.00),
-            ]
-        ),
-        RegionDef(
-            id: "yewmoor", name: "Yewmoor", levelReq: 60,
-            slots: [
-                TreeSlot(species: .ancientYew, position: CGPoint(x: 0.28, y: 0.32), scale: 0.82),
-                TreeSlot(species: .ancientYew, position: CGPoint(x: 0.72, y: 0.28), scale: 0.78),
-                TreeSlot(species: .ancientYew, position: CGPoint(x: 0.34, y: 0.66), scale: 1.05),
-                TreeSlot(species: .evergreen, position: CGPoint(x: 0.72, y: 0.68), scale: 1.00),
-            ]
-        ),
-        RegionDef(
-            id: "elderwood-heart", name: "Elderwood Heart", levelReq: 75,
-            slots: [
-                TreeSlot(species: .elderwood, position: CGPoint(x: 0.30, y: 0.28), scale: 0.80),
-                TreeSlot(species: .elderwood, position: CGPoint(x: 0.72, y: 0.34), scale: 0.86),
-                TreeSlot(species: .elderwood, position: CGPoint(x: 0.32, y: 0.66), scale: 1.05),
-                TreeSlot(species: .ancientYew, position: CGPoint(x: 0.70, y: 0.68), scale: 1.02),
-            ]
-        ),
+    /// World seed: deterministic generation. Change for alternate layouts.
+    static let worldSeed: UInt64 = 42
+
+    /// Distance-from-origin bands where species unlock. Keyed by the
+    /// minimum distance at which the species begins to appear.
+    static let speciesSpawnBands: [(species: TreeSpecies, minDistance: CGFloat)] = [
+        (.birch, 0),
+        (.oak, 2000),
+        (.willow, 4500),
+        (.evergreen, 8000),
+        (.ancientYew, 13000),
+        (.elderwood, 20000),
     ]
 
-    static func region(id: String) -> RegionDef {
-        regions.first(where: { $0.id == id }) ?? regions[0]
+    /// Eligible species for a given distance from origin.
+    static func eligibleSpecies(atDistance distance: CGFloat) -> [TreeSpecies] {
+        speciesSpawnBands.filter { distance >= $0.minDistance }.map(\.species)
     }
+
+    // MARK: Player
+
+    /// Player walk speed in world units per second.
+    static let playerWalkSpeed: CGFloat = 280
+    /// Radius within which the player is "near" a tree (world units).
+    static let proximityRadius: CGFloat = 110
+    /// Seconds the player must remain near the same tree before chopping.
+    static let dwellDuration: TimeInterval = 1.2
 
     // MARK: Achievements
 
@@ -202,8 +178,13 @@ enum GameData {
         ),
         AchievementDef(
             id: "wanderer", name: "Wanderer",
-            detail: "Visit every region", symbol: "map",
-            isUnlocked: { $0.stats.regionsVisited.count >= $0.totalRegionCount }
+            detail: "Walk 15,000 world units from origin", symbol: "map",
+            isUnlocked: { $0.maxDistanceFromOrigin >= 15_000 }
+        ),
+        AchievementDef(
+            id: "explorer", name: "Explorer",
+            detail: "Walk 30,000 world units from origin", symbol: "globe",
+            isUnlocked: { $0.maxDistanceFromOrigin >= 30_000 }
         ),
     ]
 

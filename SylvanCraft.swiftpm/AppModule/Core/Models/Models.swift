@@ -66,26 +66,66 @@ struct AxeDef {
     let power: Double
 }
 
-/// A fixed tree position within a region, in unit coordinates (0–1)
-/// mapped onto the isometric ground plane. Smaller scale = farther away.
-struct TreeSlot {
-    let species: TreeSpecies
-    let position: CGPoint
-    let scale: CGFloat
+// MARK: - World & Player types (replaces region system)
+
+/// Player movement direction for sprite flipping.
+enum PlayerFacing: String, Codable {
+    case left, right
 }
 
-struct RegionDef: Identifiable {
-    let id: String
-    let name: String
-    let levelReq: Int
-    let slots: [TreeSlot]
+/// Player animation state driving visual rendering.
+enum PlayerAnimation: String, Codable {
+    case idle, walking, chopping
+}
+
+/// The player character in world space.
+struct PlayerState: Codable {
+    var position: CGPoint  // world-space coordinates
+    var facing: PlayerFacing = .right
+    var animation: PlayerAnimation = .idle
+
+    /// Point in time when the player entered proximity range of the
+    /// current target tree. Nil when not near any tree.
+    var dwellStart: Date? = nil
+    /// Key of the tree the player is currently dwelling on.
+    var dwellTargetKey: String? = nil
+}
+
+/// Uniquely identifies a world chunk.
+struct ChunkCoord: Hashable, Codable {
+    let x: Int
+    let y: Int
+}
+
+/// A tree placed in the open world with a fixed world-space position.
+struct WorldTreeState: Identifiable, Codable {
+    /// Stable key: "\(chunkX):\(chunkY):\(indexInChunk)"
+    let key: String
+    let species: TreeSpecies
+    var worldPosition: CGPoint
+    var logsRemaining: Int
+    var respawnUntil: Date?
+
+    var id: String { key }
+
+    var isDepleted: Bool {
+        if let respawnUntil, respawnUntil > Date() { return true }
+        return false
+    }
+}
+
+/// A procedurally generated chunk containing trees and ground metadata.
+struct Chunk: Codable {
+    let coord: ChunkCoord
+    var trees: [WorldTreeState]
 }
 
 struct AchievementContext {
     let stats: LifetimeStats
     let level: Int
     let ownedAxes: Set<AxeTier>
-    let totalRegionCount: Int
+    /// Distance from origin the player has reached (in world units).
+    let maxDistanceFromOrigin: Double
 }
 
 struct AchievementDef: Identifiable {
@@ -97,22 +137,6 @@ struct AchievementDef: Identifiable {
 }
 
 // MARK: - Live state
-
-/// Runtime state of one tree slot in the current region. Identified by
-/// slot index; regenerated whenever the player travels.
-struct TreeState: Identifiable {
-    let slotIndex: Int
-    let species: TreeSpecies
-    var logsRemaining: Int
-    var respawnUntil: Date?
-
-    var id: Int { slotIndex }
-
-    var isDepleted: Bool {
-        if let respawnUntil, respawnUntil > Date() { return true }
-        return false
-    }
-}
 
 /// A stack of logs in the bank. Inventory logs do not stack (one log per
 /// slot, OSRS-style); the bank stacks freely.
@@ -150,14 +174,15 @@ struct XPDrop: Identifiable, Equatable {
 // MARK: - Persistence snapshot
 
 struct PlayerSave: Codable {
-    var schemaVersion: Int = 1
+    var schemaVersion: Int = 2
     var totalXP: Double
     var gold: Int
     var inventory: [TreeSpecies?]
     var bank: [ItemStack]
     var ownedAxes: Set<AxeTier>
     var equippedAxe: AxeTier
-    var currentRegionID: String
+    /// Player's last-known world-space position.
+    var playerPosition: CGPoint
     var stats: LifetimeStats
     var unlockedAchievements: Set<String>
 
@@ -169,8 +194,8 @@ struct PlayerSave: Codable {
             bank: [],
             ownedAxes: [.bronze],
             equippedAxe: .bronze,
-            currentRegionID: GameData.startingRegionID,
-            stats: LifetimeStats(regionsVisited: [GameData.startingRegionID]),
+            playerPosition: .zero,
+            stats: LifetimeStats(),
             unlockedAchievements: []
         )
     }

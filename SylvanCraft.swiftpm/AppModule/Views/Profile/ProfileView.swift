@@ -81,7 +81,7 @@ struct ProfileView: View {
                 .foregroundStyle(SylvanTheme.textOnParchment)
             statRow(symbol: "leaf.fill", label: "Logs chopped", value: "\(game.stats.totalLogs)")
             statRow(symbol: "circlebadge.2.fill", label: "Gold earned", value: "\(game.stats.lifetimeGold) gp")
-            statRow(symbol: "map.fill", label: "Regions visited", value: "\(game.stats.regionsVisited.count)/\(GameData.regions.count)")
+            statRow(symbol: "map.fill", label: "Distance traveled", value: "\(Int(hypot(game.player.position.x, game.player.position.y))) units")
             statRow(symbol: "hammer.fill", label: "Axes owned", value: "\(game.ownedAxes.count)/\(GameData.axes.count)")
             statRow(symbol: "sparkles", label: "Total XP", value: "\(Int(game.totalXP))")
         }

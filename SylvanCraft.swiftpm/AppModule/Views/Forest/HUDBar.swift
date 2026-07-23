@@ -21,7 +21,7 @@ struct HUDBar: View {
             .frame(width: 46, height: 46)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(game.region.name)
+                Text(biomeName)
                     .font(.display(16))
                     .foregroundStyle(SylvanTheme.textOnWood)
                 ProgressView(value: progress.fraction)
@@ -56,5 +56,14 @@ struct HUDBar: View {
                 startPoint: .top, endPoint: .bottom
             )
         )
+    }
+
+    /// Derive a biome name from player distance.
+    private var biomeName: String {
+        let dist = hypot(game.player.position.x, game.player.position.y)
+        for (species, minDist) in GameData.speciesSpawnBands.reversed() {
+            if dist >= minDist { return "\(species.displayName) Woods" }
+        }
+        return "The Forest"
     }
 }

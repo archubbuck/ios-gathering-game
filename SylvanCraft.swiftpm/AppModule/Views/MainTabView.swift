@@ -3,7 +3,6 @@ import SwiftUI
 enum AppTab: Hashable {
     case forest
     case pack
-    case map
     case shop
     case profile
 }
@@ -20,10 +19,6 @@ struct MainTabView: View {
             PackView()
                 .tabItem { Label("Pack", systemImage: "backpack") }
                 .tag(AppTab.pack)
-
-            MapView()
-                .tabItem { Label("Map", systemImage: "map") }
-                .tag(AppTab.map)
 
             ShopView()
                 .tabItem { Label("Shop", systemImage: "cart") }

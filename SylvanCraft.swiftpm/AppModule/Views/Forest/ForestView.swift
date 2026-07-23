@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The core gameplay screen: HUD, isometric forest scene with tappable
-/// trees, floating XP drops, and the event log.
+/// The core gameplay screen: scrolling open world with a player character,
+/// procedurally generated trees, proximity-based chopping, floating XP
+/// drops, HUD bar, and event log.
 struct ForestView: View {
     @EnvironmentObject private var game: GameState
     @State private var levelUpBanner: Int?
@@ -12,45 +13,53 @@ struct ForestView: View {
             HUDBar()
 
             GeometryReader { geo in
+                let size = geo.size
+
                 ZStack {
+                    // Sky
                     LinearGradient(
                         colors: [SylvanTheme.skyTop, SylvanTheme.skyBottom],
                         startPoint: .top, endPoint: .bottom
                     )
 
-                    IsometricGround()
-                        .frame(height: geo.size.height * 0.85)
+                    // Scrolling isometric ground.
+                    IsometricGround(camera: game.camera, screenSize: size)
+                        .frame(height: size.height * 0.85)
                         .frame(maxHeight: .infinity, alignment: .bottom)
 
-                    ForEach(game.trees) { tree in
-                        let slot = game.region.slots[tree.slotIndex]
+                    // Visible trees (cull off-screen).
+                    ForEach(visibleTrees(in: size)) { tree in
                         TreeNodeView(
                             tree: tree,
-                            slot: slot,
-                            isActive: game.activeChopTreeID == tree.id,
-                            isLocked: game.level < GameData.tree(for: tree.species).levelReq,
-                            onTap: { game.tapTree(tree.id) }
+                            camera: game.camera,
+                            screenSize: size
                         )
-                        .position(
-                            x: slot.position.x * geo.size.width,
-                            y: slot.position.y * geo.size.height
-                        )
-                        .zIndex(slot.position.y)
                     }
 
+                    // Player character at fixed screen position.
+                    let playerScreenPos = game.camera.playerScreenPoint(in: size)
+                    PlayerView()
+                        .position(playerScreenPos)
+                        .zIndex(5)
+
+                    // XP drop overlay above the active tree.
                     if let drop = game.lastXPDrop,
-                        let activeID = game.activeChopTreeID,
-                        game.trees.indices.contains(activeID)
+                       let key = game.activeChopTreeKey,
+                       let activeTree = game.worldTrees.first(where: { $0.key == key })
                     {
-                        let slot = game.region.slots[activeID]
+                        let treeScreenPos = game.camera.screenPoint(
+                            for: activeTree.worldPosition, in: size
+                        )
                         XPDropOverlay(drop: drop)
                             .id(drop.id)
                             .position(
-                                x: slot.position.x * geo.size.width,
-                                y: slot.position.y * geo.size.height - 70 * slot.scale
+                                x: treeScreenPos.x,
+                                y: treeScreenPos.y - 60
                             )
                             .zIndex(10)
                     }
+
+                    // Level-up celebration banner.
                     if let level = levelUpBanner {
                         LevelUpBanner(level: level)
                             .zIndex(20)
@@ -58,6 +67,8 @@ struct ForestView: View {
                     }
                 }
                 .clipped()
+                // Drag-to-move attaches to the entire scene.
+                .playerMovement()
             }
 
             EventLogView(entries: game.eventLog)
@@ -82,6 +93,20 @@ struct ForestView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Filter world trees to only those visible on screen (with padding).
+    private func visibleTrees(in size: CGSize) -> [WorldTreeState] {
+        let cam = game.camera.center
+        let pad: CGFloat = 300
+        let halfW = size.width / 2 + pad
+        let halfH = size.height / 2 + pad
+        return game.worldTrees.filter { tree in
+            let sx = (tree.worldPosition.x - cam.x) + size.width / 2
+            let sy = (tree.worldPosition.y - cam.y) + size.height / 2
+            return sx > -pad && sx < size.width + pad &&
+                   sy > -pad && sy < size.height + pad
         }
     }
 }
