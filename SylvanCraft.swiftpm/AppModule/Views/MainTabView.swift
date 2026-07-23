@@ -21,7 +21,7 @@ struct MainTabView: View {
                 .tabItem { Label("Pack", systemImage: "backpack") }
                 .tag(AppTab.pack)
 
-            PlaceholderScreen(title: "World Map", subtitle: "Travel between regions")
+            MapView()
                 .tabItem { Label("Map", systemImage: "map") }
                 .tag(AppTab.map)
 
@@ -29,30 +29,10 @@ struct MainTabView: View {
                 .tabItem { Label("Shop", systemImage: "cart") }
                 .tag(AppTab.shop)
 
-            PlaceholderScreen(title: "Profile", subtitle: "Skills & achievements")
+            ProfileView()
                 .tabItem { Label("Profile", systemImage: "person") }
                 .tag(AppTab.profile)
         }
         .tint(SylvanTheme.forestGreen)
-    }
-}
-
-/// Temporary stand-in until each tab's real screen lands in later phases.
-struct PlaceholderScreen: View {
-    let title: String
-    let subtitle: String
-
-    var body: some View {
-        ZStack {
-            SylvanTheme.parchment.ignoresSafeArea()
-            VStack(spacing: 12) {
-                Text(title)
-                    .font(.display(34))
-                    .foregroundStyle(SylvanTheme.textOnParchment)
-                Text(subtitle)
-                    .font(.body)
-                    .foregroundStyle(SylvanTheme.textOnParchmentSecondary)
-            }
-        }
     }
 }
