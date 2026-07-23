@@ -1,0 +1,55 @@
+import SwiftUI
+
+/// One tappable tree in the forest scene.
+struct TreeNodeView: View {
+    let tree: TreeState
+    let slot: TreeSlot
+    let isActive: Bool
+    let isLocked: Bool
+    let onTap: () -> Void
+
+    private var depletionProgress: Double {
+        let def = GameData.tree(for: tree.species)
+        guard def.logsMax > 0 else { return 0 }
+        return 1 - Double(tree.logsRemaining) / Double(def.logsMax)
+    }
+
+    var body: some View {
+        ZStack {
+            // Ground contact shadow
+            Ellipse()
+                .fill(Color.black.opacity(0.18))
+                .frame(width: 64, height: 16)
+                .offset(y: 58)
+
+            TreeArt(species: tree.species, depleted: tree.isDepleted)
+                .saturation(isLocked ? 0.25 : 1)
+                .opacity(isLocked ? 0.6 : 1)
+
+            if isActive {
+                ProgressRing(progress: depletionProgress)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Color.black.opacity(0.25)))
+                    .offset(y: -78)
+            }
+
+            if isLocked {
+                let level = GameData.tree(for: tree.species).levelReq
+                HStack(spacing: 3) {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("\(level)")
+                        .font(.stat(11))
+                }
+                .foregroundStyle(SylvanTheme.textOnWood)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.black.opacity(0.6)))
+                .offset(y: -70)
+            }
+        }
+        .scaleEffect(slot.scale)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+}
