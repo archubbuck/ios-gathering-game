@@ -19,6 +19,7 @@ final class GameState: ObservableObject {
     @Published var lastXPDrop: XPDrop?
 
     private var saveTask: Task<Void, Never>?
+    private var respawnTasks: [Int: Task<Void, Never>] = [:]
 
     // MARK: Derived
 
@@ -136,6 +137,7 @@ final class GameState: ObservableObject {
             trees[index] = tree
             recordEvent(.info, "The \(def.species.displayName.lowercased()) tree falls.")
             Haptics.thud()
+            scheduleRespawnRefresh(at: index, after: def.respawnSeconds)
             retargetOrStop(avoiding: index)
         } else {
             trees[index] = tree
@@ -161,6 +163,19 @@ final class GameState: ObservableObject {
             }
         }
         stopChopping()
+    }
+
+    /// Refreshes the tree state shortly after its respawn passes, so the
+    /// stump visually regrows without waiting for a tap or tick. Stale
+    /// tasks after travel are harmless: freshly spawned trees have no
+    /// respawn date, so the refresh is a no-op.
+    private func scheduleRespawnRefresh(at index: Int, after delay: TimeInterval) {
+        respawnTasks[index]?.cancel()
+        respawnTasks[index] = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((delay + 0.1) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.refreshRespawn(at: index)
+        }
     }
 
     /// If a depleted tree's respawn timer has passed, refill it.

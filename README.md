@@ -1,5 +1,7 @@
 # Sylvan Craft
 
+[![Build Check](https://github.com/archubbuck/ios-gathering-game/actions/workflows/build-check.yml/badge.svg)](https://github.com/archubbuck/ios-gathering-game/actions/workflows/build-check.yml)
+
 A medieval-fantasy woodcutting idle game for iOS, inspired by Old School
 RuneScape's Woodcutting skill. Tap trees in an isometric forest, gather
 logs, level from 1 to 99, and upgrade your axe from Bronze to Dragon.

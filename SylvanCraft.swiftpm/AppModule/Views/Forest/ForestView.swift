@@ -4,6 +4,8 @@ import SwiftUI
 /// trees, floating XP drops, and the event log.
 struct ForestView: View {
     @EnvironmentObject private var game: GameState
+    @State private var levelUpBanner: Int?
+    @State private var lastSeenLevel: Int?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,6 +51,11 @@ struct ForestView: View {
                             )
                             .zIndex(10)
                     }
+                    if let level = levelUpBanner {
+                        LevelUpBanner(level: level)
+                            .zIndex(20)
+                            .transition(.scale(scale: 0.6).combined(with: .opacity))
+                    }
                 }
                 .clipped()
             }
@@ -56,5 +63,49 @@ struct ForestView: View {
             EventLogView(entries: game.eventLog)
         }
         .background(SylvanTheme.woodPanelBottom)
+        .onAppear {
+            if lastSeenLevel == nil {
+                lastSeenLevel = game.level
+            }
+        }
+        .onChange(of: game.level) { newLevel in
+            defer { lastSeenLevel = newLevel }
+            guard let last = lastSeenLevel, newLevel > last else { return }
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.65)) {
+                levelUpBanner = newLevel
+            }
+            Task {
+                try? await Task.sleep(nanoseconds: 2_200_000_000)
+                withAnimation(.easeOut(duration: 0.5)) {
+                    if levelUpBanner == newLevel {
+                        levelUpBanner = nil
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Celebration banner flashed over the scene on level-up.
+private struct LevelUpBanner: View {
+    let level: Int
+
+    var body: some View {
+        VStack(spacing: 4) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 22))
+                .foregroundStyle(SylvanTheme.gold)
+            Text("Level \(level)!")
+                .font(.display(30))
+                .foregroundStyle(SylvanTheme.gold)
+            Text("Woodcutting")
+                .font(.stat(13))
+                .foregroundStyle(SylvanTheme.textOnWood.opacity(0.85))
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 16)
+        .woodPanel()
+        .shadow(color: SylvanTheme.gold.opacity(0.5), radius: 18)
+        .allowsHitTesting(false)
     }
 }

@@ -25,6 +25,24 @@ struct TreeNodeView: View {
             TreeArt(species: tree.species, depleted: tree.isDepleted)
                 .saturation(isLocked ? 0.25 : 1)
                 .opacity(isLocked ? 0.6 : 1)
+                .rotationEffect(.degrees(isActive ? 1.8 : 0), anchor: .bottom)
+                .animation(
+                    isActive
+                        ? .easeInOut(duration: 0.3).repeatForever(autoreverses: true)
+                        : .easeOut(duration: 0.2),
+                    value: isActive
+                )
+
+            if tree.isDepleted, let respawnUntil = tree.respawnUntil {
+                TimelineView(.periodic(from: .now, by: 0.25)) { timeline in
+                    let total = GameData.tree(for: tree.species).respawnSeconds
+                    let remaining = respawnUntil.timeIntervalSince(timeline.date)
+                    ProgressRing(progress: 1 - max(0, min(1, remaining / total)))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(Color.black.opacity(0.2)))
+                        .offset(y: 26)
+                }
+            }
 
             if isActive {
                 ProgressRing(progress: depletionProgress)
