@@ -17,7 +17,7 @@ struct MainTabView: View {
                 .tabItem { Label("Forest", systemImage: "tree") }
                 .tag(AppTab.forest)
 
-            PlaceholderScreen(title: "Pack", subtitle: "Inventory & bank")
+            PackView()
                 .tabItem { Label("Pack", systemImage: "backpack") }
                 .tag(AppTab.pack)
 
@@ -25,7 +25,7 @@ struct MainTabView: View {
                 .tabItem { Label("Map", systemImage: "map") }
                 .tag(AppTab.map)
 
-            PlaceholderScreen(title: "Axe Shop", subtitle: "Bronze to Dragon")
+            ShopView()
                 .tabItem { Label("Shop", systemImage: "cart") }
                 .tag(AppTab.shop)
 
