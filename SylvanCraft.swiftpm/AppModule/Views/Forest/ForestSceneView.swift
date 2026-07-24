@@ -18,7 +18,7 @@ struct ForestSceneView: UIViewRepresentable {
         // Background must match `scene.fogColor` so fogged-out geometry
         // dissolves seamlessly into the backdrop.
         scnView.backgroundColor = SceneKitConversions.uiColor(SylvanTheme.Scene3D.haze)
-        scnView.antialiasingMode = .multisampling4X
+        scnView.antialiasingMode = .multisampling2X
         scnView.rendersContinuously = true
         scnView.pointOfView = context.coordinator.cameraNode
         return scnView
@@ -321,14 +321,11 @@ struct ForestSceneView: UIViewRepresentable {
             directional.color = SceneKitConversions.uiColor(SylvanTheme.Scene3D.sunlight)
             directional.intensity = 1000
             directional.castsShadow = true
-            // .deferred is required for the translucent shadowColor
-            // (.forward multiplies hard black); radius/sampleCount soften
-            // the edges to match the reference's diffuse midday shadows.
-            directional.shadowMode = .deferred
-            directional.shadowColor = SceneKitConversions.uiColor(Color.black.opacity(0.30))
+            directional.shadowMode = .forward
+            directional.shadowColor = UIColor.black.withAlphaComponent(0.30)
             directional.shadowRadius = 8
             directional.shadowSampleCount = 16
-            directional.shadowMapSize = CGSize(width: 2048, height: 2048)
+            directional.shadowMapSize = CGSize(width: 1024, height: 1024)
             let directionalNode = SCNNode()
             directionalNode.light = directional
             directionalNode.eulerAngles = SCNVector3(
