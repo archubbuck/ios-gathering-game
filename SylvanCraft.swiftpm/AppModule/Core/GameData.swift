@@ -45,6 +45,7 @@ enum GameData {
             return def
         }
         assertionFailure("TreeDef not found for \(species). Ensure all tree species are registered in GameData.trees.")
+        // Fall back to the starter tree so gameplay can continue safely.
         return birchTreeDef
     }
 
@@ -68,6 +69,7 @@ enum GameData {
             return def
         }
         assertionFailure("AxeDef not found for \(tier). Ensure all axe tiers are registered in GameData.axes.")
+        // Fall back to the starter axe so gameplay can continue safely.
         return defaultAxeDef
     }
 

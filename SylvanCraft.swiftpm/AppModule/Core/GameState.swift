@@ -82,10 +82,10 @@ final class GameState: NSObject, ObservableObject {
         worldTrees = ChunkManager.generateInitial(around: pos)
         loadedChunks = ChunkManager.loadedChunkSet(around: pos)
 
+        super.init()
+
         // Snap camera to player (no lerp on init).
         camera.snap(to: pos)
-
-        super.init()
 
         recordEvent(.info, "Welcome to Sylvan Craft. Drag to explore the forest.")
 
