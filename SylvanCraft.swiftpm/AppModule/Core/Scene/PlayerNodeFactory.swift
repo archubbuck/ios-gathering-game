@@ -80,15 +80,15 @@ enum PlayerNodeFactory {
     static func swingAction() -> SCNAction {
         let windUp = SCNAction.rotateTo(
             x: 0, y: 0, z: CGFloat(SceneKitConversions.radians(fromDegrees: -90)),
-            duration: 0.15, shortestUnitArc: true
+            duration: 0.15, usesShortestUnitArc: true
         )
         let strike = SCNAction.rotateTo(
             x: 0, y: 0, z: CGFloat(SceneKitConversions.radians(fromDegrees: 20)),
-            duration: 0.25, shortestUnitArc: true
+            duration: 0.25, usesShortestUnitArc: true
         )
         let recover = SCNAction.rotateTo(
             x: 0, y: 0, z: CGFloat(SceneKitConversions.radians(fromDegrees: -30)),
-            duration: 0.2, shortestUnitArc: true
+            duration: 0.2, usesShortestUnitArc: true
         )
         let cycle = SCNAction.sequence([
             windUp, SCNAction.wait(duration: 0.03),
@@ -102,7 +102,7 @@ enum PlayerNodeFactory {
     static func restAction() -> SCNAction {
         SCNAction.rotateTo(
             x: 0, y: 0, z: CGFloat(SceneKitConversions.radians(fromDegrees: -30)),
-            duration: 0.15, shortestUnitArc: true
+            duration: 0.15, usesShortestUnitArc: true
         )
     }
 
