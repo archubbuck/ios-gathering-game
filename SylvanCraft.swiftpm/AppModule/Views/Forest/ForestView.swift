@@ -2,60 +2,40 @@ import SwiftUI
 
 /// The core gameplay screen: scrolling open world with a player character,
 /// procedurally generated trees, proximity-based chopping, floating XP
-/// drops, HUD bar, and event log.
+/// drops, HUD bar, and a frosted in-scene overlay (vitals, minimap,
+/// message log, Inventory/Skills shortcuts).
 struct ForestView: View {
     @EnvironmentObject private var game: GameState
+    @StateObject private var hudBridge = SceneHUDBridge()
     @State private var levelUpBanner: Int?
     @State private var lastSeenLevel: Int?
+    @Binding var selectedTab: AppTab
 
     var body: some View {
         VStack(spacing: 0) {
             HUDBar()
 
-            GeometryReader { geo in
-                let size = geo.size
-
+            GeometryReader { _ in
                 ZStack {
-                    // Sky
-                    LinearGradient(
-                        colors: [SylvanTheme.skyTop, SylvanTheme.skyBottom],
-                        startPoint: .top, endPoint: .bottom
-                    )
+                    // Low-poly 3D forest scene: ground, trees, and player.
+                    // Drag-to-move attaches to the scene itself (not the
+                    // ZStack) so overlay buttons stay clean tap targets.
+                    ForestSceneView(hudBridge: hudBridge)
+                        .playerMovement()
 
-                    // Scrolling isometric ground.
-                    IsometricGround(camera: game.camera, screenSize: size)
-                        .frame(height: size.height * 0.85)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-
-                    // Visible trees (cull off-screen).
-                    ForEach(visibleTrees(in: size)) { tree in
-                        TreeNodeView(
-                            tree: tree,
-                            camera: game.camera,
-                            screenSize: size
-                        )
+                    // Chop/dwell progress ring above whichever tree is
+                    // relevant, projected from 3D by SceneHUDBridge.
+                    if let point = hudBridge.screenPoint, let target = hudBridge.target {
+                        ChopDwellOverlay(target: target, axeTier: game.equippedAxe)
+                            .position(point)
+                            .zIndex(9)
                     }
 
-                    // Player character at fixed screen position.
-                    let playerScreenPos = game.camera.playerScreenPoint(in: size)
-                    PlayerView()
-                        .position(playerScreenPos)
-                        .zIndex(5)
-
                     // XP drop overlay above the active tree.
-                    if let drop = game.lastXPDrop,
-                       let key = game.activeChopTreeKey,
-                       let activeTree = game.worldTrees.first(where: { $0.key == key })
-                    {
-                        let treeScreenPos = game.camera.screenPoint(
-                            for: activeTree.worldPosition, in: size
-                        )
+                    if let drop = game.lastXPDrop, let point = hudBridge.screenPoint {
                         XPDropOverlay(drop: drop)
                             .id(drop.id)
-                            .position(
-                                x: treeScreenPos.x,
-                                y: treeScreenPos.y - 60
-                            )
+                            .position(x: point.x, y: point.y - 20)
                             .zIndex(10)
                     }
 
@@ -65,15 +45,60 @@ struct ForestView: View {
                             .zIndex(20)
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
                     }
+
+                    // HP/Stamina vitals, top-leading.
+                    VStack(alignment: .leading, spacing: 6) {
+                        HPBar(hp: game.hp, maxHP: GameData.maxHP)
+                        StaminaBar(stamina: game.stamina, maxStamina: GameData.maxStamina)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
+                    .zIndex(15)
+
+                    // Minimap, top-trailing.
+                    MinimapView()
+                        .padding(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .zIndex(15)
+
+                    // Message log floating bottom-leading.
+                    EventLogView(entries: game.eventLog)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .zIndex(15)
+
+                    // Inventory/Skills shortcuts, bottom-trailing.
+                    HStack(spacing: 10) {
+                        HUDActionButton(title: "Inventory") {
+                            Image(systemName: "backpack.fill")
+                                .font(.system(size: 30))
+                                .foregroundStyle(Color(hex: 0x8D5B33))
+                        } action: {
+                            selectedTab = .pack
+                        }
+                        HUDActionButton(title: "Skills") {
+                            ZStack {
+                                AxeArt(tier: game.equippedAxe)
+                                    .scaleEffect(x: -1)
+                                AxeArt(tier: game.equippedAxe)
+                            }
+                            .scaleEffect(0.58)
+                        } action: {
+                            selectedTab = .profile
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .zIndex(16)
                 }
                 .clipped()
-                // Drag-to-move attaches to the entire scene.
-                .playerMovement()
+                // Frosted materials must read as *white* glass even when the
+                // device is in dark mode; the SCNView ignores this.
+                .environment(\.colorScheme, .light)
             }
-
-            EventLogView(entries: game.eventLog)
         }
-        .background(SylvanTheme.woodPanelBottom)
+        .background(SylvanTheme.hudBackground)
         .onAppear {
             if lastSeenLevel == nil {
                 lastSeenLevel = game.level
@@ -93,18 +118,6 @@ struct ForestView: View {
                     }
                 }
             }
-        }
-    }
-
-    /// Filter world trees to only those visible on screen (with padding).
-    private func visibleTrees(in size: CGSize) -> [WorldTreeState] {
-        let cam = game.camera.center
-        let pad: CGFloat = 300
-        return game.worldTrees.filter { tree in
-            let sx = (tree.worldPosition.x - cam.x) + size.width / 2
-            let sy = (tree.worldPosition.y - cam.y) + size.height / 2
-            return sx > -pad && sx < size.width + pad &&
-                   sy > -pad && sy < size.height + pad
         }
     }
 }
@@ -130,5 +143,67 @@ private struct LevelUpBanner: View {
         .woodPanel()
         .shadow(color: SylvanTheme.gold.opacity(0.5), radius: 18)
         .allowsHitTesting(false)
+    }
+}
+
+/// The single chop-depletion or dwell-approach indicator, positioned at
+/// `SceneHUDBridge`'s projected screen point: a frosted disc holding the
+/// equipped axe's art, wrapped in a green progress ring, with bold
+/// "CHOPPING…" status text beneath.
+private struct ChopDwellOverlay: View {
+    let target: SceneHUDBridge.Target
+    let axeTier: AxeTier
+
+    var body: some View {
+        switch target {
+        case .chopping(let progress):
+            VStack(spacing: 6) {
+                ZStack {
+                    Circle()
+                        .fill(.ultraThinMaterial)
+                        .background(Circle().fill(SylvanTheme.hudPanelTint))
+                        .overlay(Circle().strokeBorder(SylvanTheme.hudBorder, lineWidth: 1))
+                        .frame(width: 56, height: 56)
+                    AxeArt(tier: axeTier)
+                        .scaleEffect(0.62)
+                    ProgressRing(
+                        progress: progress,
+                        tint: SylvanTheme.hudStamina,
+                        track: .white.opacity(0.5),
+                        lineWidth: 6
+                    )
+                    .frame(width: 64, height: 64)
+                }
+                VStack(spacing: 0) {
+                    Text("CHOPPING...")
+                        .font(.stat(12, weight: .heavy))
+                        .kerning(0.5)
+                    Text("\(Int((progress * 100).rounded()))%")
+                        .font(.stat(14, weight: .heavy))
+                        .monospacedDigit()
+                }
+                .hudSceneLabel()
+            }
+            .allowsHitTesting(false)
+
+        case .dwelling(let progress):
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.85), lineWidth: 2.5)
+                    .frame(width: 72, height: 72)
+                    .scaleEffect(0.7 + CGFloat(progress) * 0.25)
+                    .opacity(0.9)
+                    .animation(.easeInOut(duration: 0.3), value: progress)
+                    .shadow(color: .black.opacity(0.25), radius: 2)
+                ProgressRing(
+                    progress: progress,
+                    tint: SylvanTheme.hudStamina,
+                    track: .white.opacity(0.5)
+                )
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(.ultraThinMaterial))
+            }
+            .allowsHitTesting(false)
+        }
     }
 }

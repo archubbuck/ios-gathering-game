@@ -13,19 +13,20 @@ struct HUDBar: View {
                 Circle()
                     .fill(SylvanTheme.heroGradient)
                 Circle()
-                    .stroke(SylvanTheme.gold, lineWidth: 2.5)
+                    .stroke(.white, lineWidth: 2.5)
                 Text("\(game.level)")
                     .font(.display(19))
                     .foregroundStyle(.white)
             }
             .frame(width: 46, height: 46)
+            .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(biomeName)
                     .font(.display(16))
-                    .foregroundStyle(SylvanTheme.textOnWood)
+                    .foregroundStyle(SylvanTheme.hudTextDark)
                 ProgressView(value: progress.fraction)
-                    .tint(SylvanTheme.gold)
+                    .tint(SylvanTheme.hudStamina)
                     .scaleEffect(y: 1.4)
                 Text(
                     game.level >= XPTable.maxLevel
@@ -33,29 +34,32 @@ struct HUDBar: View {
                         : "\(Int(progress.current)) / \(Int(progress.needed)) XP"
                 )
                 .font(.stat(10, weight: .medium))
-                .foregroundStyle(SylvanTheme.textOnWood.opacity(0.7))
+                .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.7))
                 .monospacedDigit()
             }
 
             Spacer(minLength: 8)
 
             VStack(alignment: .trailing, spacing: 5) {
-                StatChip(systemImage: "circlebadge.2.fill", text: "\(game.gold) gp")
+                StatChip(
+                    systemImage: "circlebadge.2.fill",
+                    text: "\(game.gold) gp",
+                    tint: SylvanTheme.hudLogGold,
+                    onLight: true
+                )
                 StatChip(
                     systemImage: "tray.full.fill",
                     text: "\(game.packCount)/\(GameData.inventorySlots)",
-                    tint: game.packIsFull ? Color(hex: 0xFFAB91) : SylvanTheme.canopyLight
+                    tint: game.packIsFull ? SylvanTheme.hudLogWarning : SylvanTheme.forestGreen,
+                    onLight: true
                 )
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(
-            LinearGradient(
-                colors: [SylvanTheme.woodPanelTop, SylvanTheme.woodPanelBottom],
-                startPoint: .top, endPoint: .bottom
-            )
-        )
+        // Sits outside the scene ZStack, so a real Material would have
+        // nothing to blur — a solid light strip is the honest equivalent.
+        .background(Color.white.opacity(0.95))
     }
 
     /// Derive a biome name from player distance.

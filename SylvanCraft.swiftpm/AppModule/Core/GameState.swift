@@ -25,8 +25,17 @@ final class GameState: ObservableObject {
     /// The tree currently being chopped, if any.
     @Published private(set) var activeChopTreeKey: String?
 
+    /// Transient vitals — not persisted (no `PlayerSave` field). Reset to
+    /// full on every launch.
+    @Published private(set) var hp: Double = GameData.maxHP
+    @Published private(set) var stamina: Double = GameData.maxStamina
+
     /// Distance traveled since last snapshot (for wanderer achievement).
     private var farthestDistanceFromOrigin: Double = 0
+
+    /// Set when `hp` hits zero mid-chop; blocks starting a new chop/dwell
+    /// until `hp` regenerates above `GameData.hpResumeThreshold`.
+    private var hpLocked = false
 
     private var saveTask: Task<Void, Never>?
     private var updateLink: CADisplayLink?
@@ -40,6 +49,7 @@ final class GameState: ObservableObject {
     var packCount: Int { inventory.compactMap { $0 }.count }
     var packIsFull: Bool { !inventory.contains(nil) }
     var isChopping: Bool { activeChopTreeKey != nil }
+    var isExhausted: Bool { stamina <= 0 }
 
     var achievementContext: AchievementContext {
         AchievementContext(
@@ -96,7 +106,7 @@ final class GameState: ObservableObject {
         guard dt > 0, dt < 0.1 else { return } // guard against huge jumps
 
         // --- Movement ---
-        let speed = GameData.playerWalkSpeed
+        let speed = GameData.playerWalkSpeed * (isExhausted ? GameData.exhaustedSpeedMultiplier : 1)
         var moved = false
 
         if player.velocity.x != 0 || player.velocity.y != 0 {
@@ -156,11 +166,33 @@ final class GameState: ObservableObject {
         // --- Proximity chopping ---
         tickProximityChopping(now: now, dt: dt, moved: moved)
 
+        // --- HP / Stamina ---
+        updateVitals(dt: dt)
+
         // --- Camera follow ---
         camera.follow(target: player.position)
 
         // --- Auto-save periodically ---
         scheduleSave()
+    }
+
+    /// Stamina drains while active (walking or chopping) and regenerates
+    /// while idle; HP only regenerates while idle (it's only ever drained by
+    /// `performChopTick` while exhausted). Clears `hpLocked` once HP climbs
+    /// back above the resume threshold.
+    private func updateVitals(dt: CGFloat) {
+        let dtSeconds = Double(dt)
+
+        if player.animation == .idle {
+            stamina = min(GameData.maxStamina, stamina + GameData.staminaRegenPerSecond * dtSeconds)
+            hp = min(GameData.maxHP, hp + GameData.hpRegenPerSecond * dtSeconds)
+        } else {
+            stamina = max(0, stamina - GameData.staminaDrainPerSecond * dtSeconds)
+        }
+
+        if hpLocked, hp >= GameData.hpResumeThreshold {
+            hpLocked = false
+        }
     }
 
     // MARK: Proximity chopping
@@ -176,8 +208,9 @@ final class GameState: ObservableObject {
                 stopChopping()
                 return
             }
-            // Run chop ticks on interval.
-            if now - lastChopTickTime >= GameData.tickInterval {
+            // Run chop ticks on interval, slower while exhausted.
+            let interval = GameData.tickInterval * (isExhausted ? GameData.exhaustedTickMultiplier : 1)
+            if now - lastChopTickTime >= interval {
                 lastChopTickTime = now
                 performChopTick()
             }
@@ -185,7 +218,7 @@ final class GameState: ObservableObject {
         }
 
         // Not chopping — check for nearby trees.
-        guard !packIsFull else { return }
+        guard !packIsFull, !hpLocked else { return }
 
         // Find the nearest eligible tree within proximity radius.
         var best: (key: String, dist: CGFloat, species: TreeSpecies)? = nil
@@ -227,7 +260,7 @@ final class GameState: ObservableObject {
         guard let idx = worldTrees.firstIndex(where: { $0.key == treeKey }) else { return }
         let tree = worldTrees[idx]
         let def = GameData.tree(for: tree.species)
-        guard !tree.isDepleted, !packIsFull, level >= def.levelReq else { return }
+        guard !tree.isDepleted, !packIsFull, !hpLocked, level >= def.levelReq else { return }
 
         activeChopTreeKey = treeKey
         player.animation = .chopping
@@ -251,6 +284,16 @@ final class GameState: ObservableObject {
         else {
             stopChopping()
             return
+        }
+
+        if isExhausted {
+            hp = max(0, hp - GameData.hpDrainPerExhaustedTick)
+            if hp <= 0 {
+                hpLocked = true
+                recordEvent(.warning, "You're exhausted. Rest to recover before chopping again.")
+                stopChopping()
+                return
+            }
         }
 
         var tree = worldTrees[idx]
