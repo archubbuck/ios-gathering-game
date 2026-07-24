@@ -78,6 +78,14 @@ enum GameData {
     /// Cluster centers per chunk.
     static let clustersPerChunk = 4
 
+    /// Radius (world units) around the player within which trees get an
+    /// actual SceneKit node. Deliberately smaller than the gameplay area
+    /// implied by `chunkLoadRadius` — most loaded trees are never on-screen.
+    static let treeRenderRadius: CGFloat = 1400
+    /// Extra distance beyond `treeRenderRadius` before a tree node is torn
+    /// down, so trees near the boundary don't spawn/despawn every diff.
+    static let treeRenderHysteresis: CGFloat = 250
+
     /// World seed: deterministic generation. Change for alternate layouts.
     static let worldSeed: UInt64 = 42
 
@@ -187,6 +195,32 @@ enum GameData {
             isUnlocked: { $0.maxDistanceFromOrigin >= 30_000 }
         ),
     ]
+
+    // MARK: HP & Stamina
+
+    static let maxHP: Double = 100
+    static let maxStamina: Double = 100
+    /// Stamina drained per second while walking or chopping.
+    static let staminaDrainPerSecond: Double = 14
+    /// Stamina regenerated per second while idle.
+    static let staminaRegenPerSecond: Double = 20
+    /// HP regenerated per second while idle.
+    static let hpRegenPerSecond: Double = 4
+    /// HP lost per chop tick while chopping at zero stamina.
+    static let hpDrainPerExhaustedTick: Double = 6
+    /// HP must regenerate above this before chopping can resume after a
+    /// forced HP-zero stop.
+    static let hpResumeThreshold: Double = 20
+    /// Movement speed multiplier applied while stamina is at zero.
+    static let exhaustedSpeedMultiplier: CGFloat = 0.5
+    /// Chop-tick interval multiplier applied while stamina is at zero
+    /// (chopping takes longer per attempt when exhausted).
+    static let exhaustedTickMultiplier: Double = 1.75
+
+    // MARK: Minimap
+
+    /// World-space radius shown on the minimap, centered on the player.
+    static let minimapWorldRadius: CGFloat = 900
 
     // MARK: Tuning
 

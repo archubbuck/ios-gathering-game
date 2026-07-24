@@ -6,9 +6,10 @@ A medieval-fantasy woodcutting idle game for iOS, inspired by Old School
 RuneScape's Woodcutting skill. Tap trees in an isometric forest, gather
 logs, level from 1 to 99, and upgrade your axe from Bronze to Dragon.
 
-Pure SwiftUI, fully offline, no backend. All art is code-drawn vector
-(SwiftUI `Shape`/`Canvas`) — the repo contains no image assets except the
-app icon.
+Fully offline, no backend. The forest scene is a low-poly 3D world
+rendered with SceneKit (procedural primitive geometry, no `.scn`/texture
+assets); HUD and menus are SwiftUI. The repo contains no image assets
+except the app icon.
 
 - **Platform:** iOS 16.0+, iPhone, portrait only
 - **App package:** `SylvanCraft.swiftpm` (Swift Playgrounds app package —

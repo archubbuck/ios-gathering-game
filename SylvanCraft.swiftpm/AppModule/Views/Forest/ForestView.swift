@@ -5,6 +5,7 @@ import SwiftUI
 /// drops, HUD bar, and event log.
 struct ForestView: View {
     @EnvironmentObject private var game: GameState
+    @StateObject private var hudBridge = SceneHUDBridge()
     @State private var levelUpBanner: Int?
     @State private var lastSeenLevel: Int?
 
@@ -12,50 +13,24 @@ struct ForestView: View {
         VStack(spacing: 0) {
             HUDBar()
 
-            GeometryReader { geo in
-                let size = geo.size
-
+            GeometryReader { _ in
                 ZStack {
-                    // Sky
-                    LinearGradient(
-                        colors: [SylvanTheme.skyTop, SylvanTheme.skyBottom],
-                        startPoint: .top, endPoint: .bottom
-                    )
+                    // Low-poly 3D forest scene: ground, trees, and player.
+                    ForestSceneView(hudBridge: hudBridge)
 
-                    // Scrolling isometric ground.
-                    IsometricGround(camera: game.camera, screenSize: size)
-                        .frame(height: size.height * 0.85)
-                        .frame(maxHeight: .infinity, alignment: .bottom)
-
-                    // Visible trees (cull off-screen).
-                    ForEach(visibleTrees(in: size)) { tree in
-                        TreeNodeView(
-                            tree: tree,
-                            camera: game.camera,
-                            screenSize: size
-                        )
+                    // Chop/dwell progress ring above whichever tree is
+                    // relevant, projected from 3D by SceneHUDBridge.
+                    if let point = hudBridge.screenPoint, let target = hudBridge.target {
+                        ChopDwellOverlay(target: target)
+                            .position(point)
+                            .zIndex(9)
                     }
 
-                    // Player character at fixed screen position.
-                    let playerScreenPos = game.camera.playerScreenPoint(in: size)
-                    PlayerView()
-                        .position(playerScreenPos)
-                        .zIndex(5)
-
                     // XP drop overlay above the active tree.
-                    if let drop = game.lastXPDrop,
-                       let key = game.activeChopTreeKey,
-                       let activeTree = game.worldTrees.first(where: { $0.key == key })
-                    {
-                        let treeScreenPos = game.camera.screenPoint(
-                            for: activeTree.worldPosition, in: size
-                        )
+                    if let drop = game.lastXPDrop, let point = hudBridge.screenPoint {
                         XPDropOverlay(drop: drop)
                             .id(drop.id)
-                            .position(
-                                x: treeScreenPos.x,
-                                y: treeScreenPos.y - 60
-                            )
+                            .position(x: point.x, y: point.y - 20)
                             .zIndex(10)
                     }
 
@@ -65,6 +40,22 @@ struct ForestView: View {
                             .zIndex(20)
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
                     }
+
+                    // HP/Stamina vitals, top-leading.
+                    VStack(alignment: .leading, spacing: 6) {
+                        HPBar(hp: game.hp, maxHP: GameData.maxHP)
+                        StaminaBar(stamina: game.stamina, maxStamina: GameData.maxStamina)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
+                    .zIndex(15)
+
+                    // Minimap, top-trailing.
+                    MinimapView()
+                        .padding(10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .zIndex(15)
                 }
                 .clipped()
                 // Drag-to-move attaches to the entire scene.
@@ -95,18 +86,6 @@ struct ForestView: View {
             }
         }
     }
-
-    /// Filter world trees to only those visible on screen (with padding).
-    private func visibleTrees(in size: CGSize) -> [WorldTreeState] {
-        let cam = game.camera.center
-        let pad: CGFloat = 300
-        return game.worldTrees.filter { tree in
-            let sx = (tree.worldPosition.x - cam.x) + size.width / 2
-            let sy = (tree.worldPosition.y - cam.y) + size.height / 2
-            return sx > -pad && sx < size.width + pad &&
-                   sy > -pad && sy < size.height + pad
-        }
-    }
 }
 
 /// Celebration banner flashed over the scene on level-up.
@@ -130,5 +109,34 @@ private struct LevelUpBanner: View {
         .woodPanel()
         .shadow(color: SylvanTheme.gold.opacity(0.5), radius: 18)
         .allowsHitTesting(false)
+    }
+}
+
+/// The single chop-depletion or dwell-approach ring, positioned by
+/// `SceneHUDBridge`'s projected screen point. Mirrors the pre-3D
+/// `TreeNodeView`'s `ProgressRing` conventions.
+private struct ChopDwellOverlay: View {
+    let target: SceneHUDBridge.Target
+
+    var body: some View {
+        switch target {
+        case .chopping(let progress):
+            ProgressRing(progress: progress)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(Color.black.opacity(0.25)))
+
+        case .dwelling(let progress):
+            ZStack {
+                Circle()
+                    .stroke(SylvanTheme.gold, lineWidth: 2.5)
+                    .frame(width: 72, height: 72)
+                    .scaleEffect(0.7 + CGFloat(progress) * 0.25)
+                    .opacity(0.9)
+                    .animation(.easeInOut(duration: 0.3), value: progress)
+                ProgressRing(progress: progress)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color.black.opacity(0.2)))
+            }
+        }
     }
 }
