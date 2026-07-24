@@ -3,7 +3,7 @@ import SwiftUI
 /// Single source of truth for all game progress. Injected once at the app
 /// root; every screen reads and mutates through it.
 @MainActor
-final class GameState: NSObject, ObservableObject {
+class GameState: NSObject, ObservableObject {
     // MARK: Core progression (unchanged)
     @Published private(set) var totalXP: Double
     @Published private(set) var gold: Int
