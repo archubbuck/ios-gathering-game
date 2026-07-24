@@ -44,7 +44,7 @@ enum GameData {
         if let def = trees[species] {
             return def
         }
-        assertionFailure("Missing TreeDef for \(species)")
+        assertionFailure("TreeDef not found for \(species). Ensure all tree species are registered in GameData.trees.")
         return birchTreeDef
     }
 
@@ -67,7 +67,7 @@ enum GameData {
         if let def = axes.first(where: { $0.tier == tier }) {
             return def
         }
-        assertionFailure("Missing AxeDef for \(tier)")
+        assertionFailure("AxeDef not found for \(tier). Ensure all axe tiers are registered in GameData.axes.")
         return defaultAxeDef
     }
 
