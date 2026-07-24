@@ -136,13 +136,13 @@ enum LowPolyGeometry {
         var mesh = FacetMesh(bucketCount: 3)
 
         // Bottom → top ring levels (y, radius).
-        let levels: [(y: Float, radius: Float)] = (flare > 0 && flareHeight < height)
-            ? [
-                (0, baseRadius * (1 + flare)),
-                (flareHeight, baseRadius),
-                (height, topRadius),
-            ]
-            : [(0, baseRadius), (height, topRadius)]
+        let flared: [(y: Float, radius: Float)] = [
+            (0, baseRadius * (1 + flare)),
+            (flareHeight, baseRadius),
+            (height, topRadius),
+        ]
+        let straight: [(y: Float, radius: Float)] = [(0, baseRadius), (height, topRadius)]
+        let levels = (flare > 0 && flareHeight < height) ? flared : straight
 
         var ringVertices: [[SIMD3<Float>]] = []
         for level in levels {
