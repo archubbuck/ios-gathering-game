@@ -15,7 +15,10 @@ struct ForestSceneView: UIViewRepresentable {
     func makeUIView(context: Context) -> SCNView {
         let scnView = SCNView()
         scnView.scene = context.coordinator.scene
-        scnView.backgroundColor = SceneKitConversions.uiColor(SylvanTheme.skyBottom)
+        // Background must match `scene.fogColor` so fogged-out geometry
+        // dissolves seamlessly into the backdrop.
+        scnView.backgroundColor = SceneKitConversions.uiColor(SylvanTheme.Scene3D.haze)
+        scnView.antialiasingMode = .multisampling4X
         scnView.rendersContinuously = true
         scnView.pointOfView = context.coordinator.cameraNode
         return scnView
@@ -36,6 +39,7 @@ struct ForestSceneView: UIViewRepresentable {
         let scene = SCNScene()
         let cameraNode = SCNNode()
         let treeContainer = SCNNode()
+        let decorationContainer = SCNNode()
         let groundNode = SCNNode()
 
         /// Fixed world-space offset of the camera from its look-at target,
@@ -59,12 +63,22 @@ struct ForestSceneView: UIViewRepresentable {
         private var playerNode: SCNNode?
         private var lastAxeTier: AxeTier?
 
+        /// Purely visual chunk decorations (rocks, dirt patches), one
+        /// container node per loaded chunk, diffed at chunk granularity.
+        private var decorationChunks: [ChunkCoord: SCNNode] = [:]
+        /// A handful of shared decoration geometries reused across all
+        /// instances (size differences come from node scale).
+        private var decorationGeometryCache: [String: SCNGeometry] = [:]
+
         init() {
             setUpLights()
             setUpGround()
             setUpCamera()
+            setUpAtmosphere()
             treeContainer.name = "trees"
             scene.rootNode.addChildNode(treeContainer)
+            decorationContainer.name = "decorations"
+            scene.rootNode.addChildNode(decorationContainer)
         }
 
         /// Adds/removes/updates tree nodes so only trees within
@@ -78,6 +92,7 @@ struct ForestSceneView: UIViewRepresentable {
             lastTreeDiffTime = now
 
             let playerPos = game.player.position
+            diffDecorations(playerPosition: playerPos)
             let renderRadius = GameData.treeRenderRadius
             let despawnRadius = renderRadius + GameData.treeRenderHysteresis
             let renderRadiusSq = renderRadius * renderRadius
@@ -124,13 +139,123 @@ struct ForestSceneView: UIViewRepresentable {
                 existing.removeFromParentNode()
             }
 
+            // Per-instance variety, seeded from the stable tree key (an
+            // FNV-1a fold — never `String.hashValue`, which is randomized
+            // per launch) so a tree keeps its exact shape/yaw/scale across
+            // despawn/respawn, and its stump inherits the same footprint.
+            var seed: UInt64 = 0xCBF2_9CE4_8422_2325
+            for byte in tree.key.utf8 {
+                seed = (seed ^ UInt64(byte)) &* 0x0000_0100_0000_01B3
+            }
+            var rng = SeededRandom(seed: seed)
+            let variant = Int(rng.next() % UInt64(TreeGeometryFactory.variantCount))
+            let yaw = rng.nextFloat() * 2 * .pi
+            let scale = 0.9 + rng.nextFloat() * 0.25
+
             let node = tree.isDepleted
-                ? TreeGeometryFactory.makeStumpNode(species: tree.species)
-                : TreeGeometryFactory.makeTreeNode(species: tree.species, locked: locked)
+                ? TreeGeometryFactory.makeStumpNode(species: tree.species, variant: variant)
+                : TreeGeometryFactory.makeTreeNode(species: tree.species, locked: locked, variant: variant)
             node.name = desiredName
             node.position = SceneKitConversions.vector(tree.worldPosition)
+            node.eulerAngles.y = yaw
+            node.scale = SCNVector3(scale, scale, scale)
             treeContainer.addChildNode(node)
             treeNodes[tree.key] = node
+        }
+
+        /// Keeps a 3×3 chunk neighborhood of decoration containers alive
+        /// around the player (3600-unit span, comfortably covering the
+        /// 1400-unit tree render radius). Runs on `diffTrees`' throttle.
+        private func diffDecorations(playerPosition: CGPoint) {
+            let chunkX = Int(floor(playerPosition.x / GameData.chunkSize))
+            let chunkY = Int(floor(playerPosition.y / GameData.chunkSize))
+            var desired = Set<ChunkCoord>()
+            for dx in -1...1 {
+                for dy in -1...1 {
+                    desired.insert(ChunkCoord(x: chunkX + dx, y: chunkY + dy))
+                }
+            }
+
+            for coord in desired where decorationChunks[coord] == nil {
+                let container = SCNNode()
+                for instance in DecorationGenerator.decorations(for: coord) {
+                    container.addChildNode(makeDecorationNode(instance))
+                }
+                decorationContainer.addChildNode(container)
+                decorationChunks[coord] = container
+            }
+            for (coord, node) in decorationChunks where !desired.contains(coord) {
+                node.removeFromParentNode()
+                decorationChunks.removeValue(forKey: coord)
+            }
+        }
+
+        private func makeDecorationNode(_ instance: DecorationInstance) -> SCNNode {
+            let node: SCNNode
+            switch instance.kind {
+            case .rock(let radius):
+                // 3 shared boulder shapes; per-instance size via node scale.
+                let variant = Int(instance.seed % 3)
+                let geometry = decorationGeometry(key: "rock\(variant)") {
+                    LowPolyGeometry.facetedRock(
+                        radius: 10,
+                        seed: 0xD0C0 &+ UInt64(variant),
+                        baseColor: SylvanTheme.Scene3D.rock,
+                        highlightColor: SylvanTheme.Scene3D.rockLight
+                    )
+                }
+                node = SCNNode(geometry: geometry)
+                let scale = SceneKitConversions.float(radius) / 10
+                node.scale = SCNVector3(scale, scale, scale)
+                // Slightly raised so most of the boulder shows while the
+                // jittered underside stays buried.
+                node.position = SceneKitConversions.vector(
+                    instance.worldPosition, height: 0.15 * radius
+                )
+
+            case .dirtPatch(let radius, let light):
+                let variant = Int(instance.seed % 3)
+                let key = light ? "dirtLight\(variant)" : "dirt\(variant)"
+                let geometry = decorationGeometry(key: key) {
+                    LowPolyGeometry.groundPatch(
+                        radius: 10,
+                        seed: 0xD117 &+ UInt64(variant),
+                        color: light ? SylvanTheme.Scene3D.dirtLight : SylvanTheme.Scene3D.dirt
+                    )
+                }
+                node = SCNNode(geometry: geometry)
+                let scale = SceneKitConversions.float(radius) / 10
+                node.scale = SCNVector3(scale, scale, scale)
+                // Floated just above the ground plane to avoid z-fighting;
+                // flat polygons cast no useful shadow.
+                node.position = SceneKitConversions.vector(instance.worldPosition, height: 1.5)
+                node.castsShadow = false
+
+            case .pebble(let radius):
+                let geometry = decorationGeometry(key: "pebble") {
+                    LowPolyGeometry.facetedRock(
+                        radius: 10,
+                        seed: 0x9EBB1E,
+                        baseColor: SylvanTheme.Scene3D.pebble,
+                        highlightColor: SylvanTheme.Scene3D.dirtLight
+                    )
+                }
+                node = SCNNode(geometry: geometry)
+                let scale = SceneKitConversions.float(radius) / 10
+                node.scale = SCNVector3(scale, scale, scale)
+                node.position = SceneKitConversions.vector(
+                    instance.worldPosition, height: 0.15 * radius
+                )
+            }
+            node.eulerAngles.y = SceneKitConversions.float(instance.rotation)
+            return node
+        }
+
+        private func decorationGeometry(key: String, make: () -> SCNGeometry) -> SCNGeometry {
+            if let cached = decorationGeometryCache[key] { return cached }
+            let geometry = make()
+            decorationGeometryCache[key] = geometry
+            return geometry
         }
 
         /// Pushes position/facing/animation state onto the player node every
@@ -159,9 +284,18 @@ struct ForestSceneView: UIViewRepresentable {
             }
 
             body.scale = SCNVector3(game.player.facing == .left ? -1 : 1, 1, 1)
-            body.position.y = game.player.animation == .walking
-                ? Float(sin(CACurrentMediaTime() * 8) * 2)
+            let walking = game.player.animation == .walking
+            body.position.y = walking
+                ? Float(sin(CACurrentMediaTime() * 8))
                 : 0
+
+            // Hip-pivot leg swing; zeroing when idle doubles as the reset,
+            // so no action bookkeeping is needed.
+            let legSwing = walking ? Float(sin(CACurrentMediaTime() * 8)) * 0.5 : 0
+            node.childNode(withName: PlayerNodeFactory.NodeName.legPivotLeft, recursively: true)?
+                .eulerAngles.x = legSwing
+            node.childNode(withName: PlayerNodeFactory.NodeName.legPivotRight, recursively: true)?
+                .eulerAngles.x = -legSwing
 
             let isChopping = game.player.animation == .chopping
             let isSwinging = armPivot.action(forKey: PlayerNodeFactory.swingActionKey) != nil
@@ -176,19 +310,25 @@ struct ForestSceneView: UIViewRepresentable {
         private func setUpLights() {
             let ambient = SCNLight()
             ambient.type = .ambient
-            ambient.color = SceneKitConversions.uiColor(SylvanTheme.skyTop)
-            ambient.intensity = 400
+            ambient.color = SceneKitConversions.uiColor(SylvanTheme.Scene3D.ambient)
+            ambient.intensity = 500
             let ambientNode = SCNNode()
             ambientNode.light = ambient
             scene.rootNode.addChildNode(ambientNode)
 
             let directional = SCNLight()
             directional.type = .directional
-            directional.color = SceneKitConversions.uiColor(.white)
-            directional.intensity = 900
+            directional.color = SceneKitConversions.uiColor(SylvanTheme.Scene3D.sunlight)
+            directional.intensity = 1000
             directional.castsShadow = true
+            // .deferred is required for the translucent shadowColor
+            // (.forward multiplies hard black); radius/sampleCount soften
+            // the edges to match the reference's diffuse midday shadows.
             directional.shadowMode = .deferred
-            directional.shadowColor = SceneKitConversions.uiColor(Color.black.opacity(0.35))
+            directional.shadowColor = SceneKitConversions.uiColor(Color.black.opacity(0.30))
+            directional.shadowRadius = 8
+            directional.shadowSampleCount = 16
+            directional.shadowMapSize = CGSize(width: 2048, height: 2048)
             let directionalNode = SCNNode()
             directionalNode.light = directional
             directionalNode.eulerAngles = SCNVector3(
@@ -197,10 +337,21 @@ struct ForestSceneView: UIViewRepresentable {
             scene.rootNode.addChildNode(directionalNode)
         }
 
+        /// Distance haze: geometry fades into `Scene3D.haze` well inside
+        /// the tree despawn boundary, hiding pop-in at the top of the
+        /// screen and giving the tilt-shift diorama read. Camera-to-target
+        /// distance is ~1110, so near-field stays completely clean.
+        private func setUpAtmosphere() {
+            scene.fogColor = SceneKitConversions.uiColor(SylvanTheme.Scene3D.haze)
+            scene.fogStartDistance = 1500
+            scene.fogEndDistance = 2300
+            scene.fogDensityExponent = 2
+        }
+
         private func setUpGround() {
             let plane = SCNPlane(width: 4000, height: 4000)
             let material = SCNMaterial()
-            material.diffuse.contents = SceneKitConversions.uiColor(SylvanTheme.groundLight)
+            material.diffuse.contents = SceneKitConversions.uiColor(SylvanTheme.Scene3D.grass)
             material.lightingModel = .lambert
             material.isDoubleSided = true
             plane.materials = [material]

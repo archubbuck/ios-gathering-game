@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// Compact stamina readout for the forest HUD's top-leading corner, stacked
-/// under `HPBar`. Dims and swaps its icon when empty, matching the exhausted
-/// penalty applied in `GameState` (slower movement, slower chopping, and
-/// HP drain if chopping continues).
+/// Frosted stamina pill stacked under `HPBar`. Dims and swaps its icon
+/// when empty, matching the exhausted penalty applied in `GameState`
+/// (slower movement, slower chopping, and HP drain if chopping continues).
 struct StaminaBar: View {
     let stamina: Double
     let maxStamina: Double
@@ -16,29 +15,45 @@ struct StaminaBar: View {
     private var isExhausted: Bool { stamina <= 0 }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: isExhausted ? "bolt.slash.fill" : "bolt.fill")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isExhausted ? SylvanTheme.textOnWood.opacity(0.5) : Color(hex: 0x5FC77E))
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.85))
+                .frame(width: 26, height: 26)
+                .overlay(
+                    Image(systemName: isExhausted ? "bolt.slash.fill" : "bolt.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(
+                            isExhausted
+                                ? SylvanTheme.hudTextDark.opacity(0.4)
+                                : SylvanTheme.hudStamina
+                        )
+                )
 
-            GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 3) {
+                Text("STAMINA")
+                    .font(.stat(10, weight: .heavy))
+                    .kerning(0.5)
+                    .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.85))
+
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.black.opacity(0.35))
+                    Capsule().fill(SylvanTheme.hudTrack)
                     Capsule()
-                        .fill(Color(hex: 0x5FC77E))
-                        .frame(width: geo.size.width * fraction)
+                        .fill(SylvanTheme.hudStamina)
+                        .frame(width: 150 * fraction)
+                    Capsule().strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
                 }
+                .frame(width: 150, height: 16)
+                .overlay(
+                    Text("\(Int(stamina.rounded()))/\(Int(maxStamina.rounded()))")
+                        .font(.stat(10, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.35), radius: 1, y: 0.5)
+                )
             }
-            .frame(width: 74, height: 8)
-
-            Text("\(Int(stamina.rounded()))")
-                .font(.stat(11))
-                .foregroundStyle(SylvanTheme.textOnWood)
-                .monospacedDigit()
-                .frame(width: 24, alignment: .trailing)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(Color.black.opacity(0.3)))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .hudPanel(cornerRadius: 16)
     }
 }

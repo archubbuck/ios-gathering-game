@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// Compact HP readout for the forest HUD's top-leading corner. HP is a real
-/// hazard — chopping while exhausted drains it — so the fill turns red-hot
-/// rather than reading as pure decoration.
+/// Frosted HP pill for the forest HUD's top-leading corner: icon tile,
+/// "HP" caps label, and a wide value bar. HP is a real hazard — chopping
+/// while exhausted drains it — so the fill stays saturated red rather
+/// than reading as pure decoration.
 struct HPBar: View {
     let hp: Double
     let maxHP: Double
@@ -13,29 +14,41 @@ struct HPBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "heart.fill")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xE0524C))
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.85))
+                .frame(width: 26, height: 26)
+                .overlay(
+                    Image(systemName: "heart.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(SylvanTheme.hudHP)
+                )
 
-            GeometryReader { geo in
+            VStack(alignment: .leading, spacing: 3) {
+                Text("HP")
+                    .font(.stat(10, weight: .heavy))
+                    .kerning(0.5)
+                    .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.85))
+
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.black.opacity(0.35))
+                    Capsule().fill(SylvanTheme.hudTrack)
                     Capsule()
-                        .fill(Color(hex: 0xE0524C))
-                        .frame(width: geo.size.width * fraction)
+                        .fill(SylvanTheme.hudHP)
+                        .frame(width: 150 * fraction)
+                    Capsule().strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
                 }
+                .frame(width: 150, height: 16)
+                .overlay(
+                    Text("\(Int(hp.rounded()))/\(Int(maxHP.rounded()))")
+                        .font(.stat(10, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .shadow(color: .black.opacity(0.35), radius: 1, y: 0.5)
+                )
             }
-            .frame(width: 74, height: 8)
-
-            Text("\(Int(hp.rounded()))")
-                .font(.stat(11))
-                .foregroundStyle(SylvanTheme.textOnWood)
-                .monospacedDigit()
-                .frame(width: 24, alignment: .trailing)
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(Capsule().fill(Color.black.opacity(0.3)))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .hudPanel(cornerRadius: 16)
     }
 }

@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Small capsule stat readout used on dark wood surfaces (HUD, panels).
+/// Small capsule stat readout. Defaults suit dark wood surfaces; pass
+/// `onLight: true` for the forest HUD's light strip.
 struct StatChip: View {
     let systemImage: String
     let text: String
     var tint: Color = SylvanTheme.gold
+    var onLight: Bool = false
 
     var body: some View {
         HStack(spacing: 5) {
@@ -13,11 +15,13 @@ struct StatChip: View {
                 .foregroundStyle(tint)
             Text(text)
                 .font(.stat(13))
-                .foregroundStyle(SylvanTheme.textOnWood)
+                .foregroundStyle(onLight ? SylvanTheme.hudTextDark : SylvanTheme.textOnWood)
                 .monospacedDigit()
         }
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
-        .background(Capsule().fill(Color.black.opacity(0.3)))
+        .background(
+            Capsule().fill(onLight ? Color.black.opacity(0.08) : Color.black.opacity(0.3))
+        )
     }
 }

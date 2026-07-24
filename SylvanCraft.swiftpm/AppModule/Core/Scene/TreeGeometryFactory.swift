@@ -1,179 +1,285 @@
 import SceneKit
 import SwiftUI
 
-/// Builds low-poly SceneKit tree nodes, one per world tree instance, from a
-/// small set of shared per-species `SCNGeometry`/`SCNMaterial` objects
-/// (cached, not rebuilt per instance). Color/shape mapping mirrors
-/// `Views/Art/TreeArt.swift`, the canonical 2D source of truth, so each
-/// species stays recognizable in 3D.
+/// Builds faceted low-poly SceneKit tree nodes, one per world tree
+/// instance, from a small set of shared per-species `SCNGeometry` objects
+/// (cached, not rebuilt per instance). Shapes come from
+/// `LowPolyGeometry`; colors from `SylvanTheme.Scene3D`, the canonical
+/// species palette.
+///
+/// Each species caches `variantCount` distinct shape sets (different
+/// jitter seeds) so the forest doesn't read as copy-pasted; per-instance
+/// yaw/scale variation is applied at the node level by
+/// `ForestSceneView.upsertTreeNode`.
 enum TreeGeometryFactory {
+    /// Number of distinct cached shape sets per species.
+    static let variantCount = 2
+
     private struct GeometryKey: Hashable {
         let species: TreeSpecies
         let part: String
         let locked: Bool
+        let variant: Int
     }
 
     private static var cache: [GeometryKey: SCNGeometry] = [:]
 
     /// A full, choppable tree: trunk + canopy, desaturated when `locked`.
-    static func makeTreeNode(species: TreeSpecies, locked: Bool) -> SCNNode {
+    static func makeTreeNode(species: TreeSpecies, locked: Bool, variant: Int = 0) -> SCNNode {
         let root = SCNNode()
         root.name = "tree"
+        let variant = ((variant % variantCount) + variantCount) % variantCount
 
         switch species {
-        case .birch: buildBirch(into: root, locked: locked)
-        case .oak: buildOak(into: root, locked: locked)
-        case .willow: buildWillow(into: root, locked: locked)
-        case .evergreen: buildEvergreen(into: root, locked: locked)
-        case .ancientYew: buildAncientYew(into: root, locked: locked)
-        case .elderwood: buildElderwood(into: root, locked: locked)
+        case .birch: buildBirch(into: root, locked: locked, variant: variant)
+        case .oak: buildOak(into: root, locked: locked, variant: variant)
+        case .willow: buildWillow(into: root, locked: locked, variant: variant)
+        case .evergreen: buildEvergreen(into: root, locked: locked, variant: variant)
+        case .ancientYew: buildAncientYew(into: root, locked: locked, variant: variant)
+        case .elderwood: buildElderwood(into: root, locked: locked, variant: variant)
         }
         return root
     }
 
     /// A depleted tree, shown while its `respawnUntil` timer counts down.
-    static func makeStumpNode(species: TreeSpecies) -> SCNNode {
+    /// One faceted flared column with a parchment cut-face cap.
+    static func makeStumpNode(species: TreeSpecies, variant: Int = 0) -> SCNNode {
         let root = SCNNode()
         root.name = "stump"
+        let variant = ((variant % variantCount) + variantCount) % variantCount
 
-        let trunk = node(
-            key: GeometryKey(species: species, part: "stumpTrunk", locked: false),
-            color: SylvanTheme.bark
-        ) { SCNCylinder(radius: 12, height: 18) }
-        trunk.position = SCNVector3(0, 9, 0)
-        root.addChildNode(trunk)
-
-        let top = node(
-            key: GeometryKey(species: species, part: "stumpTop", locked: false),
-            color: SylvanTheme.parchmentEdge
-        ) { SCNCylinder(radius: 13, height: 2) }
-        top.position = SCNVector3(0, 18, 0)
-        root.addChildNode(top)
-
+        let key = GeometryKey(species: species, part: "stump", locked: false, variant: variant)
+        let stump = node(key: key) {
+            LowPolyGeometry.taperedColumn(
+                baseRadius: 13,
+                topRadius: 11,
+                height: 18,
+                flare: 0.5,
+                seed: seed(for: key),
+                color: SylvanTheme.Scene3D.trunkColor(for: species),
+                capColor: SylvanTheme.parchmentEdge
+            )
+        }
+        root.addChildNode(stump)
         return root
     }
 
     // MARK: - Species builders
 
-    private static func buildBirch(into root: SCNNode, locked: Bool) {
-        let trunk = node(
-            key: GeometryKey(species: .birch, part: "trunk", locked: locked),
-            color: shade(Color(hex: 0xECEFF1), locked: locked)
-        ) { SCNCylinder(radius: 5, height: 52) }
-        trunk.position = SCNVector3(0, 26, 0)
-        root.addChildNode(trunk)
-
-        let canopy = node(
-            key: GeometryKey(species: .birch, part: "canopy", locked: locked),
-            color: shade(SylvanTheme.canopyLight, locked: locked)
-        ) { SCNSphere(radius: 28) }
-        canopy.position = SCNVector3(0, 66, 0)
-        root.addChildNode(canopy)
-    }
-
-    private static func buildOak(into root: SCNNode, locked: Bool) {
-        let trunk = node(
-            key: GeometryKey(species: .oak, part: "trunk", locked: locked),
-            color: shade(SylvanTheme.bark, locked: locked)
-        ) { SCNCylinder(radius: 8, height: 46) }
-        trunk.position = SCNVector3(0, 23, 0)
-        root.addChildNode(trunk)
-
-        let lobeOffsets: [(CGFloat, CGFloat)] = [(-22, 44), (22, 44), (0, 64)]
-        for (index, offset) in lobeOffsets.enumerated() {
-            let lobe = node(
-                key: GeometryKey(species: .oak, part: "lobe\(index)", locked: locked),
-                color: shade(index == 2 ? SylvanTheme.forestGreen : SylvanTheme.canopyDark, locked: locked)
-            ) { SCNSphere(radius: index == 2 ? 30 : 24) }
-            lobe.position = SCNVector3(SceneKitConversions.float(offset.0), SceneKitConversions.float(offset.1), 0)
-            root.addChildNode(lobe)
-        }
-    }
-
-    private static func buildWillow(into root: SCNNode, locked: Bool) {
-        let trunk = node(
-            key: GeometryKey(species: .willow, part: "trunk", locked: locked),
-            color: shade(SylvanTheme.bark, locked: locked)
-        ) { SCNCylinder(radius: 6.5, height: 48) }
-        trunk.position = SCNVector3(0, 24, 0)
-        root.addChildNode(trunk)
-
-        let canopy = node(
-            key: GeometryKey(species: .willow, part: "canopy", locked: locked),
-            color: shade(Color(hex: 0x7CB342), locked: locked)
-        ) { SCNSphere(radius: 32) }
-        canopy.position = SCNVector3(0, 60, 0)
-        root.addChildNode(canopy)
-
-        // Simplified drooping fronds → tilted cones ringing the canopy (v1
-        // trim: no curved-frond geometry).
-        let frondColor = shade(Color(hex: 0x689F38), locked: locked)
-        for index in 0..<5 {
-            let angle = Double(index) / 5 * 2 * .pi
-            let frond = node(
-                key: GeometryKey(species: .willow, part: "frond\(index)", locked: locked),
-                color: frondColor
-            ) { SCNCone(topRadius: 1.5, bottomRadius: 6, height: 22) }
-            let radius: CGFloat = 26
-            frond.position = SCNVector3(
-                SceneKitConversions.float(cos(angle) * Double(radius)),
-                40,
-                SceneKitConversions.float(sin(angle) * Double(radius))
+    private static func buildBirch(into root: SCNNode, locked: Bool, variant: Int) {
+        let trunkKey = GeometryKey(species: .birch, part: "trunk", locked: locked, variant: variant)
+        let trunk = node(key: trunkKey) {
+            LowPolyGeometry.taperedColumn(
+                baseRadius: 5.5,
+                topRadius: 4,
+                height: 52,
+                flare: 0.3,
+                seed: seed(for: trunkKey),
+                color: shade(SylvanTheme.Scene3D.birchBark, locked: locked),
+                patchFraction: 0.15,
+                patchColor: shade(SylvanTheme.Scene3D.birchBarkPatch, locked: locked)
             )
-            frond.eulerAngles = SCNVector3(Float.pi * 0.85, 0, 0)
-            root.addChildNode(frond)
+        }
+        root.addChildNode(trunk)
+
+        let canopy = SylvanTheme.Scene3D.canopy(for: .birch)
+        let canopyKey = GeometryKey(species: .birch, part: "canopy", locked: locked, variant: variant)
+        let blob = node(key: canopyKey) {
+            LowPolyGeometry.facetedBlob(
+                radius: 27,
+                seed: seed(for: canopyKey),
+                baseColor: shade(canopy.base, locked: locked),
+                highlightColor: shade(canopy.highlight, locked: locked)
+            )
+        }
+        blob.position = SCNVector3(0, 64, 0)
+        root.addChildNode(blob)
+    }
+
+    private static func buildOak(into root: SCNNode, locked: Bool, variant: Int) {
+        let trunkKey = GeometryKey(species: .oak, part: "trunk", locked: locked, variant: variant)
+        let trunk = node(key: trunkKey) {
+            LowPolyGeometry.taperedColumn(
+                baseRadius: 9,
+                topRadius: 6.5,
+                height: 46,
+                seed: seed(for: trunkKey),
+                color: shade(SylvanTheme.Scene3D.trunkColor(for: .oak), locked: locked)
+            )
+        }
+        root.addChildNode(trunk)
+
+        let canopy = SylvanTheme.Scene3D.canopy(for: .oak)
+        let lobes: [(part: String, radius: Float, position: SCNVector3)] = [
+            ("lobe0", 21, SCNVector3(-19, 46, 0)),
+            ("lobe1", 21, SCNVector3(19, 46, 0)),
+            ("lobe2", 27, SCNVector3(0, 62, 0)),
+        ]
+        for lobe in lobes {
+            let key = GeometryKey(species: .oak, part: lobe.part, locked: locked, variant: variant)
+            let blob = node(key: key) {
+                LowPolyGeometry.facetedBlob(
+                    radius: lobe.radius,
+                    seed: seed(for: key),
+                    baseColor: shade(canopy.base, locked: locked),
+                    highlightColor: shade(canopy.highlight, locked: locked)
+                )
+            }
+            blob.position = lobe.position
+            root.addChildNode(blob)
         }
     }
 
-    private static func buildEvergreen(into root: SCNNode, locked: Bool) {
-        let trunk = node(
-            key: GeometryKey(species: .evergreen, part: "trunk", locked: locked),
-            color: shade(SylvanTheme.bark, locked: locked)
-        ) { SCNCylinder(radius: 6, height: 30) }
-        trunk.position = SCNVector3(0, 15, 0)
+    private static func buildWillow(into root: SCNNode, locked: Bool, variant: Int) {
+        let trunkKey = GeometryKey(species: .willow, part: "trunk", locked: locked, variant: variant)
+        let trunk = node(key: trunkKey) {
+            LowPolyGeometry.taperedColumn(
+                baseRadius: 7,
+                topRadius: 5,
+                height: 48,
+                seed: seed(for: trunkKey),
+                color: shade(SylvanTheme.Scene3D.trunkColor(for: .willow), locked: locked)
+            )
+        }
         root.addChildNode(trunk)
 
-        for layer in 0..<3 {
-            let color = layer.isMultiple(of: 2) ? SylvanTheme.canopyDark : SylvanTheme.forestGreen
-            let cone = node(
-                key: GeometryKey(species: .evergreen, part: "cone\(layer)", locked: locked),
-                color: shade(color, locked: locked)
-            ) { SCNCone(topRadius: 1, bottomRadius: 32 - CGFloat(layer) * 7, height: 34 - CGFloat(layer) * 5) }
-            cone.position = SCNVector3(0, SceneKitConversions.float(30 + CGFloat(layer) * 16), 0)
+        let canopy = SylvanTheme.Scene3D.canopy(for: .willow)
+        let capKey = GeometryKey(species: .willow, part: "canopy", locked: locked, variant: variant)
+        let cap = node(key: capKey) {
+            LowPolyGeometry.facetedBlob(
+                radius: 22,
+                squash: 0.8,
+                seed: seed(for: capKey),
+                baseColor: shade(canopy.base, locked: locked),
+                highlightColor: shade(canopy.highlight, locked: locked)
+            )
+        }
+        cap.position = SCNVector3(0, 58, 0)
+        root.addChildNode(cap)
+
+        // Drooping cascade of jagged strips ringing the canopy.
+        let frondKey = GeometryKey(species: .willow, part: "fronds", locked: locked, variant: variant)
+        let fronds = node(key: frondKey) {
+            LowPolyGeometry.frondSkirt(
+                attachRadius: 18,
+                attachHeight: 56,
+                dropLength: 30,
+                outwardBulge: 14,
+                seed: seed(for: frondKey),
+                color: shade(SylvanTheme.Scene3D.willowFrond, locked: locked),
+                highlightColor: shade(canopy.highlight, locked: locked)
+            )
+        }
+        root.addChildNode(fronds)
+    }
+
+    private static func buildEvergreen(into root: SCNNode, locked: Bool, variant: Int) {
+        let trunkKey = GeometryKey(species: .evergreen, part: "trunk", locked: locked, variant: variant)
+        let trunk = node(key: trunkKey) {
+            LowPolyGeometry.taperedColumn(
+                baseRadius: 6,
+                topRadius: 5,
+                height: 30,
+                seed: seed(for: trunkKey),
+                color: shade(SylvanTheme.Scene3D.trunkColor(for: .evergreen), locked: locked)
+            )
+        }
+        root.addChildNode(trunk)
+
+        let canopy = SylvanTheme.Scene3D.canopy(for: .evergreen)
+        let layers: [(part: String, base: Float, height: Float, y: Float)] = [
+            ("cone0", 30, 30, 26),
+            ("cone1", 24, 26, 42),
+            ("cone2", 18, 22, 58),
+        ]
+        for (index, layer) in layers.enumerated() {
+            let key = GeometryKey(species: .evergreen, part: layer.part, locked: locked, variant: variant)
+            let base = index.isMultiple(of: 2) ? canopy.base : canopy.highlight
+            let highlight = index.isMultiple(of: 2) ? canopy.highlight : canopy.base
+            let cone = node(key: key) {
+                LowPolyGeometry.taperedColumn(
+                    baseRadius: layer.base,
+                    topRadius: 1.5,
+                    height: layer.height,
+                    flare: 0,
+                    jitter: 0.12,
+                    seed: seed(for: key),
+                    color: shade(base, locked: locked),
+                    patchFraction: 0.25,
+                    patchColor: shade(highlight, locked: locked)
+                )
+            }
+            cone.position = SCNVector3(0, layer.y, 0)
             root.addChildNode(cone)
         }
     }
 
-    private static func buildAncientYew(into root: SCNNode, locked: Bool) {
-        let trunk = node(
-            key: GeometryKey(species: .ancientYew, part: "trunk", locked: locked),
-            color: shade(Color(hex: 0x4E342E), locked: locked)
-        ) { SCNCylinder(radius: 10, height: 42) }
-        trunk.position = SCNVector3(0, 21, 0)
+    private static func buildAncientYew(into root: SCNNode, locked: Bool, variant: Int) {
+        let trunkKey = GeometryKey(species: .ancientYew, part: "trunk", locked: locked, variant: variant)
+        let trunk = node(key: trunkKey) {
+            LowPolyGeometry.taperedColumn(
+                baseRadius: 11,
+                topRadius: 8,
+                height: 42,
+                flare: 0.45,
+                seed: seed(for: trunkKey),
+                color: shade(SylvanTheme.Scene3D.trunkColor(for: .ancientYew), locked: locked)
+            )
+        }
         root.addChildNode(trunk)
 
-        let canopy = node(
-            key: GeometryKey(species: .ancientYew, part: "canopy", locked: locked),
-            color: shade(Color(hex: 0x33691E), locked: locked)
-        ) { SCNSphere(radius: 38) }
-        canopy.position = SCNVector3(0, 68, 0)
-        root.addChildNode(canopy)
+        let canopy = SylvanTheme.Scene3D.canopy(for: .ancientYew)
+        let blobs: [(part: String, radius: Float, position: SCNVector3)] = [
+            ("canopy", 36, SCNVector3(0, 64, 0)),
+            ("canopyTop", 20, SCNVector3(13, 80, 7)),
+        ]
+        for blob in blobs {
+            let key = GeometryKey(species: .ancientYew, part: blob.part, locked: locked, variant: variant)
+            let child = node(key: key) {
+                LowPolyGeometry.facetedBlob(
+                    radius: blob.radius,
+                    seed: seed(for: key),
+                    baseColor: shade(canopy.base, locked: locked),
+                    highlightColor: shade(canopy.highlight, locked: locked)
+                )
+            }
+            child.position = blob.position
+            root.addChildNode(child)
+        }
     }
 
-    private static func buildElderwood(into root: SCNNode, locked: Bool) {
-        let trunk = node(
-            key: GeometryKey(species: .elderwood, part: "trunk", locked: locked),
-            color: shade(Color(hex: 0x3E2723), locked: locked)
-        ) { SCNCylinder(radius: 12, height: 48) }
-        trunk.position = SCNVector3(0, 24, 0)
+    private static func buildElderwood(into root: SCNNode, locked: Bool, variant: Int) {
+        let trunkKey = GeometryKey(species: .elderwood, part: "trunk", locked: locked, variant: variant)
+        let trunk = node(key: trunkKey) {
+            LowPolyGeometry.taperedColumn(
+                baseRadius: 13,
+                topRadius: 9,
+                height: 48,
+                flare: 0.4,
+                seed: seed(for: trunkKey),
+                color: shade(SylvanTheme.Scene3D.trunkColor(for: .elderwood), locked: locked)
+            )
+        }
         root.addChildNode(trunk)
 
-        let canopy = node(
-            key: GeometryKey(species: .elderwood, part: "canopy", locked: locked),
-            color: shade(Color(hex: 0x4A3B78), locked: locked)
-        ) { SCNSphere(radius: 36) }
-        canopy.position = SCNVector3(0, 74, 0)
-        root.addChildNode(canopy)
+        let canopy = SylvanTheme.Scene3D.canopy(for: .elderwood)
+        let blobs: [(part: String, radius: Float, position: SCNVector3)] = [
+            ("canopy", 34, SCNVector3(0, 72, 0)),
+            ("canopyTop", 18, SCNVector3(-10, 92, 6)),
+        ]
+        for blob in blobs {
+            let key = GeometryKey(species: .elderwood, part: blob.part, locked: locked, variant: variant)
+            let child = node(key: key) {
+                LowPolyGeometry.facetedBlob(
+                    radius: blob.radius,
+                    seed: seed(for: key),
+                    baseColor: shade(canopy.base, locked: locked),
+                    highlightColor: shade(canopy.highlight, locked: locked)
+                )
+            }
+            child.position = blob.position
+            root.addChildNode(child)
+        }
 
         // Faint magical glints — small emissive spheres, skipped when
         // locked (desaturation already communicates "not yet available").
@@ -181,7 +287,7 @@ enum TreeGeometryFactory {
         let glintOffsets: [(CGFloat, CGFloat, CGFloat)] = [(-12, 60, 14), (5, 82, -10), (14, 66, 12)]
         for (index, offset) in glintOffsets.enumerated() {
             let glint = node(
-                key: GeometryKey(species: .elderwood, part: "glint\(index)", locked: false),
+                key: GeometryKey(species: .elderwood, part: "glint\(index)", locked: false, variant: 0),
                 color: Color(hex: 0xB39DDB),
                 emissive: true
             ) { SCNSphere(radius: 2.5) }
@@ -196,9 +302,32 @@ enum TreeGeometryFactory {
 
     // MARK: - Shared helpers
 
-    /// Builds (or reuses a cached) `SCNGeometry`, wraps it in a fresh node.
-    /// Geometry/material objects are shared across every tree of the same
-    /// species; only the node (and its transform) is per-instance.
+    /// Deterministic per-part seed. Uses the species' fixed ordinal in
+    /// `allCases` plus an FNV-1a fold of the part name — never
+    /// `hashValue`, which is randomized per launch and would subtly
+    /// reshape cached geometry between runs.
+    private static func seed(for key: GeometryKey) -> UInt64 {
+        let ordinal = UInt64(TreeSpecies.allCases.firstIndex(of: key.species) ?? 0)
+        var hash: UInt64 = 0xCBF2_9CE4_8422_2325
+        for byte in key.part.utf8 {
+            hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01B3
+        }
+        return hash ^ (ordinal &<< 8) ^ (UInt64(key.variant) &<< 4) ^ (key.locked ? 1 : 0)
+    }
+
+    /// Caches a fully-materialed geometry (custom `LowPolyGeometry`
+    /// builders own their materials) and wraps it in a fresh node.
+    private static func node(key: GeometryKey, make: () -> SCNGeometry) -> SCNNode {
+        if let cached = cache[key] {
+            return SCNNode(geometry: cached)
+        }
+        let geometry = make()
+        cache[key] = geometry
+        return SCNNode(geometry: geometry)
+    }
+
+    /// Builds (or reuses a cached) stock-primitive `SCNGeometry` with a
+    /// single material — still used for the elderwood glints.
     private static func node(
         key: GeometryKey,
         color: Color,
