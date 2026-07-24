@@ -321,6 +321,9 @@ struct ForestSceneView: UIViewRepresentable {
             directional.color = SceneKitConversions.uiColor(SylvanTheme.Scene3D.sunlight)
             directional.intensity = 1000
             directional.castsShadow = true
+            // .forward avoids the full G-buffer allocation required by .deferred,
+            // saving ~50–100 MB of render-target memory on startup. Shadow color
+            // is set as UIColor directly, which is the correct API for forward mode.
             directional.shadowMode = .forward
             directional.shadowColor = UIColor.black.withAlphaComponent(0.30)
             directional.shadowRadius = 8
