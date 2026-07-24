@@ -63,7 +63,7 @@ final class GameState: NSObject, ObservableObject {
 
     // MARK: Init
 
-    init() {
+    override init() {
         let save = SaveManager.load() ?? PlayerSave.newGame
         totalXP = save.totalXP
         gold = save.gold
