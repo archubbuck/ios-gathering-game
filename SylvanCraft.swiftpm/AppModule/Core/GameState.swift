@@ -3,7 +3,7 @@ import SwiftUI
 /// Single source of truth for all game progress. Injected once at the app
 /// root; every screen reads and mutates through it.
 @MainActor
-final class GameState: ObservableObject {
+final class GameState: NSObject, ObservableObject {
     // MARK: Core progression (unchanged)
     @Published private(set) var totalXP: Double
     @Published private(set) var gold: Int
@@ -84,6 +84,8 @@ final class GameState: ObservableObject {
 
         // Snap camera to player (no lerp on init).
         camera.snap(to: pos)
+
+        super.init()
 
         recordEvent(.info, "Welcome to Sylvan Craft. Drag to explore the forest.")
 

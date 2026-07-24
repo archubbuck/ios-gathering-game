@@ -39,10 +39,15 @@ enum GameData {
     ]
 
     static func tree(for species: TreeSpecies) -> TreeDef {
-        guard let def = trees[species] else {
-            fatalError("Missing TreeDef for \(species)")
+        if let def = trees[species] {
+            return def
         }
-        return def
+        assertionFailure("Missing TreeDef for \(species)")
+        return trees[.birch] ?? TreeDef(
+            species: .birch, levelReq: 1, xpPerLog: 25, sellPrice: 3,
+            successLow: 0.45, successHigh: 0.90,
+            logsMin: 4, logsMax: 6, respawnSeconds: 6
+        )
     }
 
     // MARK: Axes
@@ -59,10 +64,11 @@ enum GameData {
     ]
 
     static func axe(for tier: AxeTier) -> AxeDef {
-        guard let def = axes.first(where: { $0.tier == tier }) else {
-            fatalError("Missing AxeDef for \(tier)")
+        if let def = axes.first(where: { $0.tier == tier }) {
+            return def
         }
-        return def
+        assertionFailure("Missing AxeDef for \(tier)")
+        return axes.first ?? AxeDef(tier: .bronze, levelReq: 1, cost: 0, power: 1)
     }
 
     // MARK: World generation
