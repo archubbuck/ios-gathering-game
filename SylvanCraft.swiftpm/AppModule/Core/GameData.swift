@@ -5,12 +5,14 @@ import CoreGraphics
 enum GameData {
     // MARK: Trees
 
+    private static let birchTreeDef = TreeDef(
+        species: .birch, levelReq: 1, xpPerLog: 25, sellPrice: 3,
+        successLow: 0.45, successHigh: 0.90,
+        logsMin: 4, logsMax: 6, respawnSeconds: 6
+    )
+
     static let trees: [TreeSpecies: TreeDef] = [
-        .birch: TreeDef(
-            species: .birch, levelReq: 1, xpPerLog: 25, sellPrice: 3,
-            successLow: 0.45, successHigh: 0.90,
-            logsMin: 4, logsMax: 6, respawnSeconds: 6
-        ),
+        .birch: birchTreeDef,
         .oak: TreeDef(
             species: .oak, levelReq: 15, xpPerLog: 38, sellPrice: 8,
             successLow: 0.25, successHigh: 0.70,
@@ -39,16 +41,20 @@ enum GameData {
     ]
 
     static func tree(for species: TreeSpecies) -> TreeDef {
-        guard let def = trees[species] else {
-            fatalError("Missing TreeDef for \(species)")
+        if let def = trees[species] {
+            return def
         }
-        return def
+        assertionFailure("TreeDef not found for species: \(species). Check GameData.trees for missing entries.")
+        // Fall back to the starter tree so gameplay can continue safely.
+        return birchTreeDef
     }
 
     // MARK: Axes
 
+    private static let defaultAxeDef = AxeDef(tier: .bronze, levelReq: 1, cost: 0, power: 1.00)
+
     static let axes: [AxeDef] = [
-        AxeDef(tier: .bronze, levelReq: 1, cost: 0, power: 1.00),
+        defaultAxeDef,
         AxeDef(tier: .iron, levelReq: 1, cost: 100, power: 1.10),
         AxeDef(tier: .steel, levelReq: 6, cost: 500, power: 1.25),
         AxeDef(tier: .black, levelReq: 11, cost: 1_500, power: 1.35),
@@ -59,10 +65,12 @@ enum GameData {
     ]
 
     static func axe(for tier: AxeTier) -> AxeDef {
-        guard let def = axes.first(where: { $0.tier == tier }) else {
-            fatalError("Missing AxeDef for \(tier)")
+        if let def = axes.first(where: { $0.tier == tier }) {
+            return def
         }
-        return def
+        assertionFailure("AxeDef not found for tier: \(tier). Check GameData.axes for missing entries.")
+        // Fall back to the starter axe so gameplay can continue safely.
+        return defaultAxeDef
     }
 
     // MARK: World generation
