@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The core gameplay screen: scrolling open world with a player character,
 /// procedurally generated trees, proximity-based chopping, floating XP
-/// drops, HUD bar, and a frosted in-scene overlay (stamina, minimap,
-/// message log, Inventory/Skills shortcuts).
+/// drops, HUD bar (level, XP, gold, pack, stamina), and a frosted
+/// in-scene overlay (minimap, message log, Inventory/Skills shortcuts).
 struct ForestView: View {
     @EnvironmentObject private var game: GameState
     @StateObject private var hudBridge = SceneHUDBridge()
@@ -45,15 +45,6 @@ struct ForestView: View {
                             .zIndex(20)
                             .transition(.scale(scale: 0.6).combined(with: .opacity))
                     }
-
-                    // Stamina vitals, top-leading.
-                    VStack(alignment: .leading, spacing: 6) {
-                        StaminaBar(stamina: game.stamina, maxStamina: GameData.maxStamina)
-                    }
-                    .padding(10)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .allowsHitTesting(false)
-                    .zIndex(15)
 
                     // Minimap, top-trailing.
                     MinimapView()
