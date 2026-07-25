@@ -42,6 +42,7 @@ final class GameState: NSObject, ObservableObject {
     private var updateLink: CADisplayLink?
     private var lastUpdateTime: CFTimeInterval = 0
     private var lastChopTickTime: CFTimeInterval = 0
+    private var lastAutoSaveTime: CFTimeInterval = 0
     private var respawnTasks: [String: Task<Void, Never>] = [:]
 
     // MARK: Derived
@@ -121,9 +122,13 @@ final class GameState: NSObject, ObservableObject {
             player.position.x += nx * speed * dt
             player.position.y += ny * speed * dt
 
-            // Update facing based on horizontal movement.
-            if nx > 0.01 { player.facing = .right }
-            else if nx < -0.01 { player.facing = .left }
+            // Update facing based on horizontal movement. `player` sits
+            // behind `@Published`, so every field write below is a
+            // separate publish — guard each on an actual change so
+            // holding a direction (or standing still) doesn't keep
+            // republishing the same value every frame.
+            if nx > 0.01, player.facing != .right { player.facing = .right }
+            else if nx < -0.01, player.facing != .left { player.facing = .left }
 
             // Track farthest distance.
             let dist = hypot(player.position.x, player.position.y)
@@ -132,16 +137,17 @@ final class GameState: NSObject, ObservableObject {
             }
 
             moved = true
-            player.animation = .walking
-            player.dwellStart = nil
-            player.dwellTargetKey = nil
+            if player.animation != .walking { player.animation = .walking }
+            if player.dwellStart != nil { player.dwellStart = nil }
+            if player.dwellTargetKey != nil { player.dwellTargetKey = nil }
 
             // Stop chopping if we moved away.
             if isChopping {
                 stopChopping()
             }
         } else {
-            player.animation = isChopping ? .chopping : .idle
+            let idleAnimation: PlayerAnimation = isChopping ? .chopping : .idle
+            if player.animation != idleAnimation { player.animation = idleAnimation }
         }
 
         // --- Chunk loading ---
@@ -173,10 +179,21 @@ final class GameState: NSObject, ObservableObject {
         updateVitals(dt: dt)
 
         // --- Camera follow ---
-        camera.follow(target: player.position)
+        // Skipped entirely once converged (see `Camera.convergenceEpsilon`)
+        // so an idle camera doesn't keep republishing `camera` every frame.
+        let camDist = hypot(player.position.x - camera.center.x, player.position.y - camera.center.y)
+        if camDist > Camera.convergenceEpsilon {
+            camera.follow(target: player.position)
+        }
 
         // --- Auto-save periodically ---
-        scheduleSave()
+        // A timestamp check rather than `scheduleSave()`'s debounce Task —
+        // calling that every frame would cancel/reschedule it 60–120
+        // times a second and the 2s delay would never actually elapse.
+        if now - lastAutoSaveTime > GameData.autoSaveInterval {
+            lastAutoSaveTime = now
+            saveNow()
+        }
     }
 
     /// Stamina drains while active (walking or chopping) and regenerates

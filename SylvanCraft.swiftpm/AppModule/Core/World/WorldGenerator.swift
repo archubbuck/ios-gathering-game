@@ -152,6 +152,9 @@ extension Int {
     /// Random integer in range using SeededRandom.
     init(randomIn range: ClosedRange<Int>, using rng: inout SeededRandom) {
         let count = range.upperBound - range.lowerBound + 1
-        self = range.lowerBound + Int(rng.nextCGFloat() * CGFloat(count))
+        // `nextCGFloat()` can return exactly 1.0, which would otherwise
+        // produce `range.upperBound + 1` — clamp to stay in range.
+        let offset = min(Int(rng.nextCGFloat() * CGFloat(count)), count - 1)
+        self = range.lowerBound + offset
     }
 }

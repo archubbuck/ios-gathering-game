@@ -19,7 +19,12 @@ struct ForestSceneView: UIViewRepresentable {
         // dissolves seamlessly into the backdrop.
         scnView.backgroundColor = SceneKitConversions.uiColor(SylvanTheme.Scene3D.haze)
         scnView.antialiasingMode = .multisampling2X
-        scnView.rendersContinuously = true
+        // Transforms are pushed explicitly from `updateUIView` on every
+        // `GameState` change, so SceneKit only needs to render on demand —
+        // `rendersContinuously` forced a full render pass every display
+        // refresh (60–120/s) from the moment the view appeared, which was
+        // a major contributor to startup GPU/thermal pressure.
+        scnView.rendersContinuously = false
         scnView.pointOfView = context.coordinator.cameraNode
         return scnView
     }
@@ -326,8 +331,12 @@ struct ForestSceneView: UIViewRepresentable {
             // is set as UIColor directly, which is the correct API for forward mode.
             directional.shadowMode = .forward
             directional.shadowColor = UIColor.black.withAlphaComponent(0.30)
-            directional.shadowRadius = 8
-            directional.shadowSampleCount = 16
+            // 4 samples give soft shadow edges at a fraction of the GPU
+            // cost of the previous 16-sample PCF kernel, which — combined
+            // with the broken camera frustum below — was the main
+            // per-frame GPU expense contributing to startup instability.
+            directional.shadowRadius = 4
+            directional.shadowSampleCount = 4
             directional.shadowMapSize = CGSize(width: 1024, height: 1024)
             let directionalNode = SCNNode()
             directionalNode.light = directional
@@ -365,7 +374,16 @@ struct ForestSceneView: UIViewRepresentable {
         private func setUpCamera() {
             let camera = SCNCamera()
             camera.usesOrthographicProjection = true
-            camera.orthographicScale = 8
+            // Camera sits at (0, 900, 650) → ~1110 units from its look-at
+            // target with a ~54° elevation, so the camera's "up" component
+            // is ≈0.586 and the 58-unit-tall player maps to ~34 camera-
+            // space units. A scale of 350 puts the player at ~10% of
+            // screen height and reveals ~700 world units of ground —
+            // appropriate for an explore/gather loop. The previous value
+            // of 8 (a ~16-unit visible window) clipped the player's head
+            // and fed SceneKit an incorrect frustum for shadow cascade
+            // calculations, contributing to startup instability.
+            camera.orthographicScale = 350
             camera.zNear = 1
             camera.zFar = 5000
             cameraNode.camera = camera
