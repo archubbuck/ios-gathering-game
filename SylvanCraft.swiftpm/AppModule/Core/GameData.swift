@@ -236,4 +236,8 @@ enum GameData {
     static let tickInterval: TimeInterval = 0.6
     static let inventorySlots = 28
     static let eventLogCap = 50
+    /// Seconds between wall-clock-timed autosaves in the per-frame update
+    /// loop (covers plain movement, which doesn't go through any of the
+    /// action methods that call `scheduleSave()` directly).
+    static let autoSaveInterval: TimeInterval = 15
 }

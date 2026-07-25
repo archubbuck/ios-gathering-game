@@ -10,7 +10,7 @@ import SceneKit
 /// `ForEach` be retired.
 @MainActor
 final class SceneHUDBridge: ObservableObject {
-    enum Target {
+    enum Target: Equatable {
         case chopping(progress: Double)
         case dwelling(progress: Double)
     }
@@ -23,37 +23,59 @@ final class SceneHUDBridge: ObservableObject {
     /// canopy, not hug it exactly.
     private static let ringHeight: CGFloat = 90
 
+    /// True once an `update(game:scnView:)` call has computed values that
+    /// differ from what's published and scheduled the actual publish for
+    /// the next run-loop turn. Coalesces bursts of `updateUIView` calls
+    /// (which can fire faster than once per display refresh) into a
+    /// single deferred publish, and guarantees the publish never happens
+    /// synchronously inside a SwiftUI view-update pass — doing so there
+    /// would re-invalidate this bridge's observers mid-update.
+    private var publishScheduled = false
+    private var pendingScreenPoint: CGPoint?
+    private var pendingTarget: Target?
+
     func update(game: GameState, scnView: SCNView?) {
-        guard let scnView else {
-            screenPoint = nil
-            target = nil
-            return
+        let (newPoint, newTarget) = computeState(game: game, scnView: scnView)
+
+        guard newPoint != screenPoint || newTarget != target else { return }
+
+        pendingScreenPoint = newPoint
+        pendingTarget = newTarget
+        guard !publishScheduled else { return }
+        publishScheduled = true
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.publishScheduled = false
+            self.screenPoint = self.pendingScreenPoint
+            self.target = self.pendingTarget
         }
+    }
+
+    private func computeState(game: GameState, scnView: SCNView?) -> (CGPoint?, Target?) {
+        guard let scnView else { return (nil, nil) }
 
         if let key = game.activeChopTreeKey,
            let tree = game.worldTrees.first(where: { $0.key == key })
         {
-            project(tree.worldPosition, in: scnView)
-            target = .chopping(progress: depletionProgress(for: tree))
-            return
+            let point = project(tree.worldPosition, in: scnView)
+            return (point, .chopping(progress: depletionProgress(for: tree)))
         }
 
         if let key = game.player.dwellTargetKey,
            let tree = game.worldTrees.first(where: { $0.key == key })
         {
-            project(tree.worldPosition, in: scnView)
-            target = .dwelling(progress: dwellProgress(for: game))
-            return
+            let point = project(tree.worldPosition, in: scnView)
+            return (point, .dwelling(progress: dwellProgress(for: game)))
         }
 
-        screenPoint = nil
-        target = nil
+        return (nil, nil)
     }
 
-    private func project(_ worldPosition: CGPoint, in scnView: SCNView) {
+    private func project(_ worldPosition: CGPoint, in scnView: SCNView) -> CGPoint {
         let worldPoint = SceneKitConversions.vector(worldPosition, height: Self.ringHeight)
         let projected = scnView.projectPoint(worldPoint)
-        screenPoint = CGPoint(
+        return CGPoint(
             x: SceneKitConversions.cgFloat(projected.x),
             y: SceneKitConversions.cgFloat(projected.y)
         )
