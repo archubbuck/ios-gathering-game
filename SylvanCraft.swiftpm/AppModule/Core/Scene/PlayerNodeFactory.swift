@@ -13,6 +13,7 @@ enum PlayerNodeFactory {
         static let root = "player"
         static let body = "player-body"
         static let armPivot = "player-armPivot"
+        static let armPivotLeft = "player-armPivot-L"
         static let legPivotLeft = "player-legPivot-L"
         static let legPivotRight = "player-legPivot-R"
         /// Group wrapping only the axe meshes inside the arm pivot, so a
@@ -72,16 +73,23 @@ enum PlayerNodeFactory {
         collar.position = SCNVector3(0, 37, 0)
         body.addChildNode(collar)
 
-        // Left arm hangs at the side; only the right (axe) arm animates.
+        // Left arm mirrors the right arm's shoulder pivot so it can swing
+        // during the walk cycle (it never swings an axe, so it starts at
+        // rest with no z-tilt).
+        let leftArmPivot = SCNNode()
+        leftArmPivot.name = NodeName.armPivotLeft
+        leftArmPivot.position = SCNVector3(-11.5, 37, 0)
+        body.addChildNode(leftArmPivot)
+
         let leftArm = SCNNode(geometry: SCNCapsule(capRadius: 3, height: 15))
         leftArm.geometry?.materials = [material(color: SylvanTheme.Scene3D.shirt)]
-        leftArm.position = SCNVector3(-11.5, 30, 0)
-        body.addChildNode(leftArm)
+        leftArm.position = SCNVector3(0, -6, 0)
+        leftArmPivot.addChildNode(leftArm)
 
         let leftHand = SCNNode(geometry: SCNSphere(radius: 3.2))
         leftHand.geometry?.materials = [material(color: SylvanTheme.Scene3D.skin)]
-        leftHand.position = SCNVector3(-11.5, 22, 0)
-        body.addChildNode(leftHand)
+        leftHand.position = SCNVector3(0, -13, 0)
+        leftArmPivot.addChildNode(leftHand)
 
         // Big chibi head with the straw hat parented to it.
         let head = SCNNode(geometry: SCNSphere(radius: 9.5))

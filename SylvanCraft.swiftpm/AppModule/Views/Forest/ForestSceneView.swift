@@ -294,13 +294,16 @@ struct ForestSceneView: UIViewRepresentable {
             }
 
             let walking = game.player.animation == .walking
-            body.position.y = walking
-                ? Float(sin(CACurrentMediaTime() * 8))
-                : 0
+            let walkPhase = CACurrentMediaTime() * 8
+
+            // Torso: vertical bob plus a subtle twist, so the upper body
+            // reads as "walking" rather than just the legs.
+            body.position.y = walking ? Float(sin(walkPhase)) : 0
+            body.eulerAngles.y = walking ? Float(sin(walkPhase)) * 0.06 : 0
 
             // Hip-pivot leg swing; zeroing when idle doubles as the reset,
             // so no action bookkeeping is needed.
-            let legSwing = walking ? Float(sin(CACurrentMediaTime() * 8)) * 0.5 : 0
+            let legSwing = walking ? Float(sin(walkPhase)) * 0.5 : 0
             node.childNode(withName: PlayerNodeFactory.NodeName.legPivotLeft, recursively: true)?
                 .eulerAngles.x = legSwing
             node.childNode(withName: PlayerNodeFactory.NodeName.legPivotRight, recursively: true)?
@@ -312,8 +315,20 @@ struct ForestSceneView: UIViewRepresentable {
                 armPivot.runAction(PlayerNodeFactory.swingAction(), forKey: PlayerNodeFactory.swingActionKey)
             } else if !isChopping, isSwinging {
                 armPivot.removeAction(forKey: PlayerNodeFactory.swingActionKey)
-                armPivot.runAction(PlayerNodeFactory.restAction())
+                // Tracked under the same key as the swing so the walk
+                // cycle below waits for the ease-back to finish instead
+                // of fighting it for control of the pivot.
+                armPivot.runAction(PlayerNodeFactory.restAction(), forKey: PlayerNodeFactory.swingActionKey)
+            } else if !isChopping, !isSwinging {
+                // Arm swing, opposite phase to the leg on the same side
+                // (contralateral gait) — right arm forward with left leg.
+                armPivot.eulerAngles.x = -legSwing
             }
+
+            // Left arm never fights an axe action, so it always tracks
+            // the walk cycle directly.
+            node.childNode(withName: PlayerNodeFactory.NodeName.armPivotLeft, recursively: true)?
+                .eulerAngles.x = legSwing
         }
 
         private func setUpLights() {
