@@ -12,7 +12,7 @@ struct MainTabView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ForestView(selectedTab: $selectedTab)
+            ForestView()
                 .tabItem { Label("Forest", systemImage: "tree") }
                 .tag(AppTab.forest)
 

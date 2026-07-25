@@ -9,7 +9,6 @@ struct ForestView: View {
     @StateObject private var hudBridge = SceneHUDBridge()
     @State private var levelUpBanner: Int?
     @State private var lastSeenLevel: Int?
-    @Binding var selectedTab: AppTab
 
     var body: some View {
         VStack(spacing: 0) {
@@ -57,30 +56,6 @@ struct ForestView: View {
                         .padding(12)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                         .zIndex(15)
-
-                    // Inventory/Skills shortcuts, bottom-trailing.
-                    HStack(spacing: 10) {
-                        HUDActionButton(title: "Inventory") {
-                            Image(systemName: "backpack.fill")
-                                .font(.system(size: 30))
-                                .foregroundStyle(Color(hex: 0x8D5B33))
-                        } action: {
-                            selectedTab = .pack
-                        }
-                        HUDActionButton(title: "Skills") {
-                            ZStack {
-                                AxeArt(tier: game.equippedAxe)
-                                    .scaleEffect(x: -1)
-                                AxeArt(tier: game.equippedAxe)
-                            }
-                            .scaleEffect(0.58)
-                        } action: {
-                            selectedTab = .profile
-                        }
-                    }
-                    .padding(12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                    .zIndex(16)
                 }
                 .clipped()
                 // Frosted materials must read as *white* glass even when the
