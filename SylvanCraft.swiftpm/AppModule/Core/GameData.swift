@@ -126,6 +126,15 @@ enum GameData {
     /// Chance a given chunk spawns one potion pickup.
     static let potionSpawnChancePerChunk: Double = 0.35
 
+    // MARK: Ads
+
+    /// Length of the simulated "watch ad" countdown before the reward is
+    /// granted. No real ad SDK is used — this is a placeholder timer.
+    static let simulatedAdDuration: TimeInterval = 5
+    /// Cooldown before "Watch Ad" is available again, counted from when
+    /// the granted boost *ends* (not from when the ad was watched).
+    static let adBoostCooldownDuration: TimeInterval = 600
+
     // MARK: Player
 
     /// Player walk speed in world units per second.

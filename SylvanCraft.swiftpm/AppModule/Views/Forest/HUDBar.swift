@@ -4,6 +4,7 @@ import SwiftUI
 /// and stamina.
 struct HUDBar: View {
     @EnvironmentObject private var game: GameState
+    @State private var showingAdReward = false
 
     var body: some View {
         let progress = XPTable.progressToNext(xp: game.totalXP)
@@ -60,6 +61,8 @@ struct HUDBar: View {
 
             if game.isWoodcuttingBoostActive {
                 potionBoostRow
+            } else {
+                adBoostRow
             }
 
             staminaRow
@@ -69,6 +72,13 @@ struct HUDBar: View {
         // Sits outside the scene ZStack, so a real Material would have
         // nothing to blur — a solid light strip is the honest equivalent.
         .background(Color.white.opacity(0.95))
+        .fullScreenCover(isPresented: $showingAdReward) {
+            AdRewardOverlay {
+                game.grantAdBoost()
+                showingAdReward = false
+            }
+            .interactiveDismissDisabled(true)
+        }
     }
 
     /// Compact stamina meter spanning the full HUD width, dimming and
@@ -127,6 +137,50 @@ struct HUDBar: View {
     private func formattedCountdown(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    /// Shown whenever no boost is active: either a "Watch Ad" button (off
+    /// cooldown) or a live countdown to when it becomes available again.
+    @ViewBuilder
+    private var adBoostRow: some View {
+        if game.isAdBoostAvailable {
+            adBoostButton
+        } else if let cooldownExpiresAt = game.adBoostCooldownExpiresAt {
+            adCooldownRow(expiresAt: cooldownExpiresAt)
+        }
+    }
+
+    private var adBoostButton: some View {
+        Button {
+            showingAdReward = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SylvanTheme.forestGreen)
+                Text("Watch Ad: +\(GameData.woodcuttingPotionLevelBoost) Woodcutting")
+                    .font(.stat(11, weight: .semibold))
+                    .foregroundStyle(SylvanTheme.hudTextDark)
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func adCooldownRow(expiresAt: Date) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let remaining = max(0, expiresAt.timeIntervalSince(context.date))
+            HStack(spacing: 8) {
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.4))
+                Text("Ad boost ready in \(formattedCountdown(remaining))")
+                    .font(.stat(11, weight: .semibold))
+                    .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.6))
+                    .monospacedDigit()
+                Spacer()
+            }
+        }
     }
 
     private var staminaFraction: Double {

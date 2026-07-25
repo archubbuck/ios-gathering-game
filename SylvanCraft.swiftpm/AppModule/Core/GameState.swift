@@ -35,6 +35,10 @@ final class GameState: NSObject, ObservableObject {
     /// not persisted, same as `stamina` — so a boost resets on relaunch.
     @Published private(set) var activeBoostExpiresAt: Date?
 
+    /// When "Watch Ad" becomes available again after an ad-granted boost
+    /// ends. Transient — not persisted, same as `activeBoostExpiresAt`.
+    @Published private(set) var adBoostCooldownExpiresAt: Date?
+
     /// Distance traveled since last snapshot (for wanderer achievement).
     private var farthestDistanceFromOrigin: Double = 0
 
@@ -57,6 +61,14 @@ final class GameState: NSObject, ObservableObject {
     var isWoodcuttingBoostActive: Bool {
         guard let activeBoostExpiresAt else { return false }
         return activeBoostExpiresAt > Date()
+    }
+
+    /// Whether "Watch Ad" can be used: no boost currently running and the
+    /// post-boost cooldown (if any) has elapsed.
+    var isAdBoostAvailable: Bool {
+        guard !isWoodcuttingBoostActive else { return false }
+        guard let adBoostCooldownExpiresAt else { return true }
+        return adBoostCooldownExpiresAt <= Date()
     }
 
     /// Woodcutting level used for gameplay gating (tree unlocks, chop
@@ -452,6 +464,20 @@ final class GameState: NSObject, ObservableObject {
         worldPickups[idx].respawnUntil = Date().addingTimeInterval(GameData.potionRespawnSeconds)
         activeBoostExpiresAt = Date().addingTimeInterval(GameData.woodcuttingPotionDuration)
         recordEvent(.info, "You drink the woodcutting potion. +\(GameData.woodcuttingPotionLevelBoost) Woodcutting for 5 minutes!")
+        Haptics.fanfare()
+    }
+
+    // MARK: Ads
+
+    /// Called once the simulated "watch ad" countdown completes. Grants
+    /// the same reward as a Woodcutting Potion (resets to a full 5
+    /// minutes rather than stacking), then locks "Watch Ad" behind a
+    /// cooldown that starts counting once the boost itself ends.
+    func grantAdBoost() {
+        let boostExpiry = Date().addingTimeInterval(GameData.woodcuttingPotionDuration)
+        activeBoostExpiresAt = boostExpiry
+        adBoostCooldownExpiresAt = boostExpiry.addingTimeInterval(GameData.adBoostCooldownDuration)
+        recordEvent(.info, "Ad reward claimed! +\(GameData.woodcuttingPotionLevelBoost) Woodcutting for 5 minutes!")
         Haptics.fanfare()
     }
 
