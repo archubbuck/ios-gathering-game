@@ -49,8 +49,13 @@ struct ForestSceneView: UIViewRepresentable {
         let groundNode = SCNNode()
 
         /// Fixed world-space offset of the camera from its look-at target,
-        /// giving the isometric-style downward angled view.
-        static let cameraOffset = SCNVector3(0, 900, 650)
+        /// giving the isometric-style downward angled view. Distance to
+        /// target is preserved at ~1110 (`sqrt(555^2 + 961^2)`); the split
+        /// between height and depth gives a 30° elevation above the
+        /// horizon (`atan(555/961)`), a shallower/more side-on read than
+        /// the previous 54° (`atan(900/650)`). See `baseOrthographicScale`
+        /// for how the framing was re-tuned to match.
+        static let cameraOffset = SCNVector3(0, 555, 961)
 
         /// Grid interval the ground plane snaps to as the player moves, so a
         /// single fixed-size plane can cover a ~20,000-unit world without
@@ -416,8 +421,11 @@ struct ForestSceneView: UIViewRepresentable {
             directional.shadowMapSize = CGSize(width: 1024, height: 1024)
             let directionalNode = SCNNode()
             directionalNode.light = directional
+            // Pitch lowered from -60° to -36° alongside the camera's move
+            // from ~54° to 30° elevation, keeping the sun's angle relative
+            // to the new shallower camera consistent with before.
             directionalNode.eulerAngles = SCNVector3(
-                -Float.pi / 3, Float.pi / 4, 0
+                -Float.pi / 5, Float.pi / 4, 0
             )
             scene.rootNode.addChildNode(directionalNode)
         }
@@ -447,18 +455,22 @@ struct ForestSceneView: UIViewRepresentable {
             scene.rootNode.addChildNode(groundNode)
         }
 
-        /// Camera sits at (0, 900, 650) → ~1110 units from its look-at
-        /// target with a ~54° elevation, so the camera's "up" component
-        /// is ≈0.586 and the 58-unit-tall player maps to ~34 camera-
-        /// space units. A scale of 350 puts the player at ~10% of
-        /// screen height and reveals ~700 world units of ground —
-        /// appropriate for an explore/gather loop. The previous value
-        /// of 8 (a ~16-unit visible window) clipped the player's head
-        /// and fed SceneKit an incorrect frustum for shadow cascade
-        /// calculations, contributing to startup instability. Divided by
-        /// `Camera.zoomScale` each frame in `updateCamera` to implement
-        /// pinch-to-zoom.
-        static let baseOrthographicScale: Double = 350
+        /// Camera sits at (0, 555, 961) → ~1110 units from its look-at
+        /// target with a 30° elevation (down from the previous 54°), so
+        /// ground-depth visibility (which scales with `1/sin(elevation)`)
+        /// would roughly double at the old scale of 350. Re-tuned to 216
+        /// (`350 * sin(30°)/sin(54°)`) to keep the same ~860-world-unit
+        /// visible ground depth as before the tilt change — appropriate
+        /// for an explore/gather loop. Because vertical objects foreshorten
+        /// by `cos(elevation)`, the shallower angle now shows the
+        /// 58-unit-tall player at ~23% of screen height (vs ~10% before),
+        /// which is the intended effect of tilting away from top-down.
+        /// The previous value of 8 (a ~16-unit visible window) clipped the
+        /// player's head and fed SceneKit an incorrect frustum for shadow
+        /// cascade calculations, contributing to startup instability.
+        /// Divided by `Camera.zoomScale` each frame in `updateCamera` to
+        /// implement pinch-to-zoom.
+        static let baseOrthographicScale: Double = 216
 
         private func setUpCamera() {
             let camera = SCNCamera()
