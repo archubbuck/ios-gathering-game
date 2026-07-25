@@ -447,19 +447,23 @@ struct ForestSceneView: UIViewRepresentable {
             scene.rootNode.addChildNode(groundNode)
         }
 
+        /// Camera sits at (0, 900, 650) → ~1110 units from its look-at
+        /// target with a ~54° elevation, so the camera's "up" component
+        /// is ≈0.586 and the 58-unit-tall player maps to ~34 camera-
+        /// space units. A scale of 350 puts the player at ~10% of
+        /// screen height and reveals ~700 world units of ground —
+        /// appropriate for an explore/gather loop. The previous value
+        /// of 8 (a ~16-unit visible window) clipped the player's head
+        /// and fed SceneKit an incorrect frustum for shadow cascade
+        /// calculations, contributing to startup instability. Divided by
+        /// `Camera.zoomScale` each frame in `updateCamera` to implement
+        /// pinch-to-zoom.
+        static let baseOrthographicScale: Double = 350
+
         private func setUpCamera() {
             let camera = SCNCamera()
             camera.usesOrthographicProjection = true
-            // Camera sits at (0, 900, 650) → ~1110 units from its look-at
-            // target with a ~54° elevation, so the camera's "up" component
-            // is ≈0.586 and the 58-unit-tall player maps to ~34 camera-
-            // space units. A scale of 350 puts the player at ~10% of
-            // screen height and reveals ~700 world units of ground —
-            // appropriate for an explore/gather loop. The previous value
-            // of 8 (a ~16-unit visible window) clipped the player's head
-            // and fed SceneKit an incorrect frustum for shadow cascade
-            // calculations, contributing to startup instability.
-            camera.orthographicScale = 350
+            camera.orthographicScale = Self.baseOrthographicScale
             camera.zNear = 1
             camera.zFar = 5000
             cameraNode.camera = camera
@@ -488,6 +492,7 @@ struct ForestSceneView: UIViewRepresentable {
                 target.z + Self.cameraOffset.z
             )
             cameraNode.look(at: target)
+            cameraNode.camera?.orthographicScale = Self.baseOrthographicScale / Double(game.camera.zoomScale)
         }
     }
 }

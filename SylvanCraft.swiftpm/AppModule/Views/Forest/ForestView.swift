@@ -9,6 +9,25 @@ struct ForestView: View {
     @StateObject private var hudBridge = SceneHUDBridge()
     @State private var levelUpBanner: Int?
     @State private var lastSeenLevel: Int?
+    /// `game.camera.zoomScale` captured at the start of the current pinch
+    /// gesture, so `MagnificationGesture`'s cumulative-since-start value
+    /// can be applied as a multiplier on top of it rather than replacing
+    /// whatever zoom the player already had.
+    @State private var pinchStartZoomScale: CGFloat?
+
+    /// Two-finger pinch-to-zoom, applied simultaneously with the
+    /// single-finger drag-to-move gesture on `ForestSceneView`.
+    private var pinchToZoomGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                let base = pinchStartZoomScale ?? game.camera.zoomScale
+                pinchStartZoomScale = base
+                game.camera.zoomScale = Camera.clampedZoom(base * value)
+            }
+            .onEnded { _ in
+                pinchStartZoomScale = nil
+            }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -19,8 +38,11 @@ struct ForestView: View {
                     // Low-poly 3D forest scene: ground, trees, and player.
                     // Drag-to-move attaches to the scene itself (not the
                     // ZStack) so overlay buttons stay clean tap targets.
+                    // Pinch-to-zoom is layered on as a simultaneous gesture
+                    // so it doesn't steal touches from drag-to-move.
                     ForestSceneView(hudBridge: hudBridge)
                         .playerMovement()
+                        .simultaneousGesture(pinchToZoomGesture)
 
                     // Chop/dwell progress ring above whichever tree is
                     // relevant, projected from 3D by SceneHUDBridge.
