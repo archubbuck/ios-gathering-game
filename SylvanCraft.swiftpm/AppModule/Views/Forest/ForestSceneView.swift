@@ -45,6 +45,7 @@ struct ForestSceneView: UIViewRepresentable {
         let cameraNode = SCNNode()
         let treeContainer = SCNNode()
         let decorationContainer = SCNNode()
+        let pickupContainer = SCNNode()
         let groundNode = SCNNode()
 
         /// Fixed world-space offset of the camera from its look-at target,
@@ -75,6 +76,10 @@ struct ForestSceneView: UIViewRepresentable {
         /// instances (size differences come from node scale).
         private var decorationGeometryCache: [String: SCNGeometry] = [:]
 
+        /// Live potion pickup nodes keyed by `PotionPickupState.key`,
+        /// diffed alongside trees on the same throttle in `diffTrees`.
+        private var pickupNodes: [String: SCNNode] = [:]
+
         init() {
             setUpLights()
             setUpGround()
@@ -84,6 +89,8 @@ struct ForestSceneView: UIViewRepresentable {
             scene.rootNode.addChildNode(treeContainer)
             decorationContainer.name = "decorations"
             scene.rootNode.addChildNode(decorationContainer)
+            pickupContainer.name = "pickups"
+            scene.rootNode.addChildNode(pickupContainer)
         }
 
         /// Adds/removes/updates tree nodes so only trees within
@@ -98,6 +105,7 @@ struct ForestSceneView: UIViewRepresentable {
 
             let playerPos = game.player.position
             diffDecorations(playerPosition: playerPos)
+            diffPickups(game: game)
             let renderRadius = GameData.treeRenderRadius
             let despawnRadius = renderRadius + GameData.treeRenderHysteresis
             let renderRadiusSq = renderRadius * renderRadius
@@ -111,7 +119,7 @@ struct ForestSceneView: UIViewRepresentable {
 
                 if distSq <= renderRadiusSq {
                     seenKeys.insert(tree.key)
-                    upsertTreeNode(for: tree, level: game.level)
+                    upsertTreeNode(for: tree, level: game.effectiveLevel)
                 } else if distSq > despawnRadiusSq {
                     if let existing = treeNodes[tree.key] {
                         existing.removeFromParentNode()
@@ -166,6 +174,55 @@ struct ForestSceneView: UIViewRepresentable {
             node.scale = SCNVector3(scale, scale, scale)
             treeContainer.addChildNode(node)
             treeNodes[tree.key] = node
+        }
+
+        /// Adds/removes potion pickup nodes so only non-collected pickups
+        /// within the tree render radius carry an `SCNNode`. Uses the same
+        /// render/hysteresis radii as trees — pickups are sparse (at most
+        /// one per chunk) so no separate distance budget is needed.
+        private func diffPickups(game: GameState) {
+            let playerPos = game.player.position
+            let renderRadius = GameData.treeRenderRadius
+            let despawnRadius = renderRadius + GameData.treeRenderHysteresis
+            let renderRadiusSq = renderRadius * renderRadius
+            let despawnRadiusSq = despawnRadius * despawnRadius
+
+            var seenKeys = Set<String>()
+            for pickup in game.worldPickups {
+                let dx = pickup.worldPosition.x - playerPos.x
+                let dy = pickup.worldPosition.y - playerPos.y
+                let distSq = dx * dx + dy * dy
+
+                if pickup.isCollected {
+                    if let existing = pickupNodes[pickup.key] {
+                        existing.removeFromParentNode()
+                        pickupNodes.removeValue(forKey: pickup.key)
+                    }
+                    continue
+                }
+
+                if distSq <= renderRadiusSq {
+                    seenKeys.insert(pickup.key)
+                    if pickupNodes[pickup.key] == nil {
+                        let node = PickupNodeFactory.makePotionNode()
+                        node.position = SceneKitConversions.vector(pickup.worldPosition)
+                        pickupContainer.addChildNode(node)
+                        pickupNodes[pickup.key] = node
+                    }
+                } else if distSq > despawnRadiusSq {
+                    if let existing = pickupNodes[pickup.key] {
+                        existing.removeFromParentNode()
+                        pickupNodes.removeValue(forKey: pickup.key)
+                    }
+                } else if pickupNodes[pickup.key] != nil {
+                    seenKeys.insert(pickup.key)
+                }
+            }
+
+            for key in pickupNodes.keys where !seenKeys.contains(key) {
+                pickupNodes[key]?.removeFromParentNode()
+                pickupNodes.removeValue(forKey: key)
+            }
         }
 
         /// Keeps a 3×3 chunk neighborhood of decoration containers alive

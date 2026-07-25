@@ -113,6 +113,19 @@ enum GameData {
         speciesSpawnBands.filter { distance >= $0.minDistance }.map(\.species)
     }
 
+    // MARK: Potions
+
+    /// Woodcutting level bonus granted while a potion boost is active.
+    static let woodcuttingPotionLevelBoost = 6
+    /// Duration of the woodcutting level boost.
+    static let woodcuttingPotionDuration: TimeInterval = 300
+    /// Radius within which a potion pickup is auto-collected.
+    static let potionPickupRadius: CGFloat = 90
+    /// Seconds before a collected pickup reappears at the same spot.
+    static let potionRespawnSeconds: TimeInterval = 240
+    /// Chance a given chunk spawns one potion pickup.
+    static let potionSpawnChancePerChunk: Double = 0.35
+
     // MARK: Player
 
     /// Player walk speed in world units per second.

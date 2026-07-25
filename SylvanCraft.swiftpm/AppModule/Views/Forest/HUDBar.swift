@@ -58,6 +58,10 @@ struct HUDBar: View {
                 }
             }
 
+            if game.isWoodcuttingBoostActive {
+                potionBoostRow
+            }
+
             staminaRow
         }
         .padding(.horizontal, 14)
@@ -97,6 +101,32 @@ struct HUDBar: View {
                 .monospacedDigit()
                 .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.8))
         }
+    }
+
+    /// Shown only while a Woodcutting Potion boost is active; a live
+    /// mm:ss countdown to `game.activeBoostExpiresAt`.
+    @ViewBuilder
+    private var potionBoostRow: some View {
+        if let expiresAt = game.activeBoostExpiresAt {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let remaining = max(0, expiresAt.timeIntervalSince(context.date))
+                HStack(spacing: 8) {
+                    Image(systemName: "flask.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(SylvanTheme.Scene3D.potionGlow)
+                    Text("Woodcutting +\(GameData.woodcuttingPotionLevelBoost) — \(formattedCountdown(remaining))")
+                        .font(.stat(11, weight: .semibold))
+                        .foregroundStyle(SylvanTheme.hudTextDark)
+                        .monospacedDigit()
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func formattedCountdown(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 
     private var staminaFraction: Double {

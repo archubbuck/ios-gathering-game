@@ -21,6 +21,7 @@ final class GameState: NSObject, ObservableObject {
     @Published var player: PlayerState
     @Published var camera = Camera(center: .zero)
     @Published private(set) var worldTrees: [WorldTreeState] = []
+    @Published private(set) var worldPickups: [PotionPickupState] = []
     @Published private(set) var loadedChunks: Set<ChunkCoord> = []
 
     /// The tree currently being chopped, if any.
@@ -29,6 +30,10 @@ final class GameState: NSObject, ObservableObject {
     /// Transient vitals — not persisted (no `PlayerSave` field). Reset to
     /// full on every launch.
     @Published private(set) var stamina: Double = GameData.maxStamina
+
+    /// Expiry of an active Woodcutting Potion boost, if any. Transient —
+    /// not persisted, same as `stamina` — so a boost resets on relaunch.
+    @Published private(set) var activeBoostExpiresAt: Date?
 
     /// Distance traveled since last snapshot (for wanderer achievement).
     private var farthestDistanceFromOrigin: Double = 0
@@ -47,6 +52,21 @@ final class GameState: NSObject, ObservableObject {
     var packIsFull: Bool { !inventory.contains(nil) }
     var isChopping: Bool { activeChopTreeKey != nil }
     var isExhausted: Bool { stamina <= 0 }
+
+    /// Whether a Woodcutting Potion boost is currently in effect.
+    var isWoodcuttingBoostActive: Bool {
+        guard let activeBoostExpiresAt else { return false }
+        return activeBoostExpiresAt > Date()
+    }
+
+    /// Woodcutting level used for gameplay gating (tree unlocks, chop
+    /// success chance): the real XP-based `level` plus the potion boost
+    /// while active, clamped to the max level. The HUD's displayed level
+    /// number stays literal — only this drives gameplay checks.
+    var effectiveLevel: Int {
+        guard isWoodcuttingBoostActive else { return level }
+        return min(level + GameData.woodcuttingPotionLevelBoost, XPTable.maxLevel)
+    }
 
     var achievementContext: AchievementContext {
         AchievementContext(
@@ -77,6 +97,7 @@ final class GameState: NSObject, ObservableObject {
 
         // Generate initial chunks around the player.
         worldTrees = ChunkManager.generateInitial(around: pos)
+        worldPickups = ChunkManager.generateInitialPickups(around: pos)
         loadedChunks = ChunkManager.loadedChunkSet(around: pos)
 
         super.init()
@@ -157,6 +178,7 @@ final class GameState: NSObject, ObservableObject {
             for coord in added {
                 let chunk = WorldGenerator.generateChunk(coord: coord)
                 worldTrees.append(contentsOf: chunk.trees)
+                worldPickups.append(contentsOf: PickupGenerator.generate(for: coord))
             }
             // Unload far chunks.
             let removed = loadedChunks.subtracting(newChunks)
@@ -165,15 +187,30 @@ final class GameState: NSObject, ObservableObject {
                     worldTrees.filter { $0.key.hasPrefix("\(coord.x):\(coord.y):") }.map(\.key)
                 })
                 worldTrees.removeAll { removedKeys.contains($0.key) }
+
+                let removedPickupKeys = Set(removed.flatMap { coord in
+                    worldPickups.filter { $0.key.hasPrefix("potion:\(coord.x):\(coord.y):") }.map(\.key)
+                })
+                worldPickups.removeAll { removedPickupKeys.contains($0.key) }
             }
             loadedChunks = newChunks
         }
 
-        // Refresh respawned trees.
+        // Refresh respawned trees and potion pickups.
         refreshAllRespawning()
+        refreshPotionRespawning()
+
+        // Clear an expired potion boost.
+        if let expiresAt = activeBoostExpiresAt, expiresAt <= Date() {
+            activeBoostExpiresAt = nil
+            recordEvent(.info, "Your woodcutting potion has worn off.")
+        }
 
         // --- Proximity chopping ---
         tickProximityChopping(now: now, dt: dt, moved: moved)
+
+        // --- Potion pickups ---
+        tickPotionPickups()
 
         // --- Stamina ---
         updateVitals(dt: dt)
@@ -238,7 +275,7 @@ final class GameState: NSObject, ObservableObject {
         for tree in worldTrees {
             guard !tree.isDepleted, tree.logsRemaining > 0 else { continue }
             let def = GameData.tree(for: tree.species)
-            guard level >= def.levelReq else { continue }
+            guard effectiveLevel >= def.levelReq else { continue }
             let dist = hypot(tree.worldPosition.x - player.position.x,
                              tree.worldPosition.y - player.position.y)
             guard dist <= GameData.proximityRadius else { continue }
@@ -273,7 +310,7 @@ final class GameState: NSObject, ObservableObject {
         guard let idx = worldTrees.firstIndex(where: { $0.key == treeKey }) else { return }
         let tree = worldTrees[idx]
         let def = GameData.tree(for: tree.species)
-        guard !tree.isDepleted, !packIsFull, level >= def.levelReq else { return }
+        guard !tree.isDepleted, !packIsFull, effectiveLevel >= def.levelReq else { return }
 
         activeChopTreeKey = treeKey
         player.animation = .chopping
@@ -315,7 +352,7 @@ final class GameState: NSObject, ObservableObject {
         }
 
         let axe = GameData.axe(for: equippedAxe)
-        let chance = ChopMath.successChance(level: level, tree: def, axe: axe)
+        let chance = ChopMath.successChance(level: effectiveLevel, tree: def, axe: axe)
         guard Double.random(in: 0..<1) < chance else { return }
 
         addToPack(tree.species)
@@ -345,7 +382,7 @@ final class GameState: NSObject, ObservableObject {
         var best: (key: String, dist: CGFloat)? = nil
         for tree in worldTrees {
             guard !tree.isDepleted, tree.logsRemaining > 0 else { continue }
-            guard level >= GameData.tree(for: tree.species).levelReq else { continue }
+            guard effectiveLevel >= GameData.tree(for: tree.species).levelReq else { continue }
             let dist = hypot(tree.worldPosition.x - player.position.x,
                              tree.worldPosition.y - player.position.y)
             guard dist <= GameData.proximityRadius * 1.35 else { continue }
@@ -389,6 +426,40 @@ final class GameState: NSObject, ObservableObject {
                 let def = GameData.tree(for: worldTrees[i].species)
                 worldTrees[i].respawnUntil = nil
                 worldTrees[i].logsRemaining = Int.random(in: def.logsMin...def.logsMax)
+            }
+        }
+    }
+
+    // MARK: Potion pickups
+
+    /// Auto-collects any non-collected potion pickup within
+    /// `GameData.potionPickupRadius` of the player.
+    private func tickPotionPickups() {
+        for idx in worldPickups.indices {
+            guard !worldPickups[idx].isCollected else { continue }
+            let pickup = worldPickups[idx]
+            let dist = hypot(pickup.worldPosition.x - player.position.x,
+                             pickup.worldPosition.y - player.position.y)
+            guard dist <= GameData.potionPickupRadius else { continue }
+            collectPotionPickup(idx)
+        }
+    }
+
+    /// Consuming a potion is immediate: the pickup vanishes (to respawn
+    /// later) and the boost timer resets to a full 5 minutes rather than
+    /// stacking with any remaining time.
+    private func collectPotionPickup(_ idx: Int) {
+        worldPickups[idx].respawnUntil = Date().addingTimeInterval(GameData.potionRespawnSeconds)
+        activeBoostExpiresAt = Date().addingTimeInterval(GameData.woodcuttingPotionDuration)
+        recordEvent(.info, "You drink the woodcutting potion. +\(GameData.woodcuttingPotionLevelBoost) Woodcutting for 5 minutes!")
+        Haptics.fanfare()
+    }
+
+    private func refreshPotionRespawning() {
+        let now = Date()
+        for i in worldPickups.indices {
+            if let until = worldPickups[i].respawnUntil, until <= now {
+                worldPickups[i].respawnUntil = nil
             }
         }
     }
@@ -629,7 +700,9 @@ final class GameState: NSObject, ObservableObject {
         camera.snap(to: .zero)
 
         worldTrees = ChunkManager.generateInitial(around: .zero)
+        worldPickups = ChunkManager.generateInitialPickups(around: .zero)
         loadedChunks = ChunkManager.loadedChunkSet(around: .zero)
+        activeBoostExpiresAt = nil
 
         eventLog = []
         recordEvent(.info, "A fresh start. Welcome to the forest.")

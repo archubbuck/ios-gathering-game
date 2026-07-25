@@ -114,6 +114,24 @@ struct WorldTreeState: Identifiable, Codable {
     }
 }
 
+/// A Woodcutting Potion pickup placed in the open world with a fixed
+/// world-space position. Fully transient like `WorldTreeState` — never
+/// written to `PlayerSave`; unloading/reloading a chunk regenerates the
+/// same deterministic layout.
+struct PotionPickupState: Identifiable, Codable {
+    /// Stable key: "potion:\(chunkX):\(chunkY):\(indexInChunk)"
+    let key: String
+    var worldPosition: CGPoint
+    var respawnUntil: Date?
+
+    var id: String { key }
+
+    var isCollected: Bool {
+        if let respawnUntil, respawnUntil > Date() { return true }
+        return false
+    }
+}
+
 /// A procedurally generated chunk containing trees and ground metadata.
 struct Chunk: Codable {
     let coord: ChunkCoord

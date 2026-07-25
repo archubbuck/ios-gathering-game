@@ -41,6 +41,28 @@ struct MinimapView: View {
                     with: .color(SylvanTheme.Scene3D.minimapDot(for: tree.species).opacity(0.85))
                 )
             }
+
+            for pickup in game.worldPickups where !pickup.isCollected {
+                let dx = pickup.worldPosition.x - game.player.position.x
+                let dy = pickup.worldPosition.y - game.player.position.y
+                let distance = (dx * dx + dy * dy).squareRoot()
+                guard distance <= GameData.minimapWorldRadius else { continue }
+
+                let dotCenter = CGPoint(x: center.x + dx * scale, y: center.y + dy * scale)
+                let dotSize: CGFloat = 7
+                let rect = CGRect(
+                    x: dotCenter.x - dotSize / 2, y: dotCenter.y - dotSize / 2,
+                    width: dotSize, height: dotSize
+                )
+                // Diamond shape distinguishes pickups from round tree dots.
+                var diamond = Path()
+                diamond.move(to: CGPoint(x: rect.midX, y: rect.minY))
+                diamond.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+                diamond.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+                diamond.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
+                diamond.closeSubpath()
+                context.fill(diamond, with: .color(SylvanTheme.Scene3D.potionMinimapDot))
+            }
         }
         .frame(width: diameter, height: diameter)
         .clipShape(Circle())

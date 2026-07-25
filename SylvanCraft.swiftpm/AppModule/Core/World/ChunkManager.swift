@@ -24,4 +24,10 @@ enum ChunkManager {
         let coords = loadedChunkSet(around: position)
         return coords.flatMap { WorldGenerator.generateChunk(coord: $0).trees }
     }
+
+    /// Generate the initial batch of potion pickups on game start / reset.
+    static func generateInitialPickups(around position: CGPoint) -> [PotionPickupState] {
+        let coords = loadedChunkSet(around: position)
+        return coords.flatMap { PickupGenerator.generate(for: $0) }
+    }
 }

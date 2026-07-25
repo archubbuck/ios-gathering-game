@@ -70,6 +70,10 @@ enum SylvanTheme {
         static let rockLight = Color(hex: 0xB6BBC0)
         static let pebble = Color(hex: 0xC9B18C)
 
+        /// Woodcutting Potion pickup: glowing violet orb.
+        static let potionGlow = Color(hex: 0x9C4DCC)
+        static let potionGlowLight = Color(hex: 0xC98CF0)
+
         static let trunk = Color(hex: 0x8B5E3C)
         static let trunkDark = Color(hex: 0x6E4A2E)
         static let birchBark = Color(hex: 0xEDE7DA)
@@ -115,6 +119,9 @@ enum SylvanTheme {
         static func minimapDot(for species: TreeSpecies) -> Color {
             canopy(for: species).base
         }
+
+        /// Minimap dot for a Woodcutting Potion pickup.
+        static let potionMinimapDot = potionGlow
     }
 }
 
