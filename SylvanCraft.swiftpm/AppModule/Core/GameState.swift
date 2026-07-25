@@ -77,7 +77,7 @@ final class GameState: NSObject, ObservableObject {
 
         // Restore or create player at saved position.
         let pos = save.playerPosition
-        player = PlayerState(position: pos, facing: .right)
+        player = PlayerState(position: pos)
         farthestDistanceFromOrigin = hypot(pos.x, pos.y)
 
         // Generate initial chunks around the player.
@@ -122,13 +122,18 @@ final class GameState: NSObject, ObservableObject {
             player.position.x += nx * speed * dt
             player.position.y += ny * speed * dt
 
-            // Update facing based on horizontal movement. `player` sits
-            // behind `@Published`, so every field write below is a
-            // separate publish — guard each on an actual change so
-            // holding a direction (or standing still) doesn't keep
-            // republishing the same value every frame.
-            if nx > 0.01, player.facing != .right { player.facing = .right }
-            else if nx < -0.01, player.facing != .left { player.facing = .left }
+            // Turn to face the direction of travel. `player` sits behind
+            // `@Published`, so every field write is a separate publish —
+            // guard on an actual (meaningful) change so holding a
+            // direction doesn't keep republishing the same value. The
+            // diff is wrapped into (-pi, pi] since `facingAngle` can sit
+            // near the ±pi seam even when the new heading is nearby.
+            let heading = atan2(nx, ny)
+            var angleDiff = heading - player.facingAngle
+            angleDiff = atan2(sin(angleDiff), cos(angleDiff))
+            if abs(angleDiff) > 0.01 {
+                player.facingAngle = heading
+            }
 
             // Track farthest distance.
             let dist = hypot(player.position.x, player.position.y)
@@ -641,7 +646,7 @@ final class GameState: NSObject, ObservableObject {
         stats = fresh.stats
         unlockedAchievements = fresh.unlockedAchievements
 
-        player = PlayerState(position: .zero, facing: .right)
+        player = PlayerState(position: .zero)
         farthestDistanceFromOrigin = 0
         camera.snap(to: .zero)
 

@@ -278,6 +278,11 @@ struct ForestSceneView: UIViewRepresentable {
             }
 
             node.position = SceneKitConversions.vector(game.player.position)
+            // World-space `facingAngle` (atan2(dx, dy)) maps directly onto
+            // a SceneKit yaw: world x → scene X, world y → scene Z, so
+            // rotating the root about Y by that angle turns the character
+            // to face the same direction on the XZ ground plane.
+            node.eulerAngles.y = SceneKitConversions.float(game.player.facingAngle)
 
             guard let body = node.childNode(withName: PlayerNodeFactory.NodeName.body, recursively: true),
                   let armPivot = node.childNode(withName: PlayerNodeFactory.NodeName.armPivot, recursively: true)
@@ -288,7 +293,6 @@ struct ForestSceneView: UIViewRepresentable {
                 lastAxeTier = game.equippedAxe
             }
 
-            body.scale = SCNVector3(game.player.facing == .left ? -1 : 1, 1, 1)
             let walking = game.player.animation == .walking
             body.position.y = walking
                 ? Float(sin(CACurrentMediaTime() * 8))

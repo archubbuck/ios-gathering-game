@@ -68,11 +68,6 @@ struct AxeDef {
 
 // MARK: - World & Player types (replaces region system)
 
-/// Player movement direction for sprite flipping.
-enum PlayerFacing: String, Codable {
-    case left, right
-}
-
 /// Player animation state driving visual rendering.
 enum PlayerAnimation: String, Codable {
     case idle, walking, chopping
@@ -82,7 +77,11 @@ enum PlayerAnimation: String, Codable {
 struct PlayerState: Codable {
     var position: CGPoint  // world-space coordinates
     var velocity: CGPoint = .zero  // drag-driven movement speed
-    var facing: PlayerFacing = .right
+    /// Heading the character faces, in radians, measured the same way as
+    /// `atan2(dx, dy)` in world space (0 = facing +y/"south"). Holds its
+    /// last value while stationary so the character doesn't snap to a
+    /// default facing when it stops.
+    var facingAngle: CGFloat = 0
     var animation: PlayerAnimation = .idle
 
     /// Point in time when the player entered proximity range of the
