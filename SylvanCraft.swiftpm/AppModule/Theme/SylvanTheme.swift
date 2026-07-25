@@ -46,7 +46,6 @@ enum SylvanTheme {
 
     // Frosted-glass in-scene HUD (ForestView overlay only; the rest of the
     // app keeps the wood/parchment identity above).
-    static let hudHP = Color(hex: 0xFF5350)
     static let hudStamina = Color(hex: 0x4CD964)
     static let hudTextDark = Color(hex: 0x3A4046)
     static let hudPanelTint = Color.white.opacity(0.35)

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Frosted stamina pill stacked under `HPBar`. Dims and swaps its icon
+/// Frosted stamina pill for the forest HUD. Dims and swaps its icon
 /// when empty, matching the exhausted penalty applied in `GameState`
-/// (slower movement, slower chopping, and HP drain if chopping continues).
+/// (slower movement and slower chopping).
 struct StaminaBar: View {
     let stamina: Double
     let maxStamina: Double

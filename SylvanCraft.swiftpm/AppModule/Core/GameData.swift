@@ -204,21 +204,13 @@ enum GameData {
         ),
     ]
 
-    // MARK: HP & Stamina
+    // MARK: Stamina
 
-    static let maxHP: Double = 100
     static let maxStamina: Double = 100
     /// Stamina drained per second while walking or chopping.
     static let staminaDrainPerSecond: Double = 14
     /// Stamina regenerated per second while idle.
     static let staminaRegenPerSecond: Double = 20
-    /// HP regenerated per second while idle.
-    static let hpRegenPerSecond: Double = 4
-    /// HP lost per chop tick while chopping at zero stamina.
-    static let hpDrainPerExhaustedTick: Double = 6
-    /// HP must regenerate above this before chopping can resume after a
-    /// forced HP-zero stop.
-    static let hpResumeThreshold: Double = 20
     /// Movement speed multiplier applied while stamina is at zero.
     static let exhaustedSpeedMultiplier: CGFloat = 0.5
     /// Chop-tick interval multiplier applied while stamina is at zero
