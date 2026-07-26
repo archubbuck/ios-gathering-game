@@ -16,6 +16,10 @@ final class GameState: NSObject, ObservableObject {
     @Published private(set) var unlockedAchievements: Set<String>
     @Published private(set) var eventLog: [EventLogEntry] = []
     @Published var lastXPDrop: XPDrop?
+    /// The most recent chop-tick attempt (success or miss), used by
+    /// `ForestSceneView.Coordinator` to retrigger the axe-swing animation
+    /// exactly when a real gameplay tick resolves.
+    @Published private(set) var lastChopStrike: ChopStrikeEvent?
 
     // MARK: World & player (new)
     @Published var player: PlayerState
@@ -365,7 +369,12 @@ final class GameState: NSObject, ObservableObject {
 
         let axe = GameData.axe(for: equippedAxe)
         let chance = ChopMath.successChance(level: effectiveLevel, tree: def, axe: axe)
-        guard Double.random(in: 0..<1) < chance else { return }
+        let success = Double.random(in: 0..<1) < chance
+        // Published on every real attempt (hit or miss) so the axe visibly
+        // swings every tick, but impact feedback (wood chips/tree shake)
+        // only fires when `success` is true.
+        lastChopStrike = ChopStrikeEvent(treeKey: key, success: success, worldPosition: tree.worldPosition)
+        guard success else { return }
 
         addToPack(tree.species)
         grantXP(def.xpPerLog)

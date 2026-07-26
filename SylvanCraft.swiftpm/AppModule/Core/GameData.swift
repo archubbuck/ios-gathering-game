@@ -143,6 +143,10 @@ enum GameData {
     static let proximityRadius: CGFloat = 110
     /// Seconds the player must remain near the same tree before chopping.
     static let dwellDuration: TimeInterval = 1.2
+    /// Fraction into the chop-swing animation where the axe visually
+    /// contacts the wood — the strike keyframe lands here, matching the
+    /// instant `GameState.performChopTick()` actually resolves.
+    static let chopStrikeFraction: Double = 0.55
 
     // MARK: Achievements
 

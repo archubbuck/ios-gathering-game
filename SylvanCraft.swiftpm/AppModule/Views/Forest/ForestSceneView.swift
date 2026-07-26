@@ -73,6 +73,16 @@ struct ForestSceneView: UIViewRepresentable {
         /// call (needs `game.equippedAxe`, unavailable in `init`).
         private var playerNode: SCNNode?
         private var lastAxeTier: AxeTier?
+        /// The last `ChopStrikeEvent.id` the chop-swing ensemble has already
+        /// reacted to — a change here (or no swing currently animating)
+        /// retriggers `applyChopSwing`, keeping the visible swing in
+        /// lockstep with `GameState`'s real chop-tick cadence.
+        private var lastHandledStrikeID: UUID?
+        /// True from the moment a swing is started until this Coordinator
+        /// has issued the one-shot `easeChopToRest` for it — guards against
+        /// re-issuing the ease every frame while its action is still
+        /// finishing (which would never let it complete).
+        private var isChopSwingActive = false
 
         /// Purely visual chunk decorations (rocks, dirt patches), one
         /// container node per loaded chunk, diffed at chunk granularity.
@@ -347,50 +357,119 @@ struct ForestSceneView: UIViewRepresentable {
             node.eulerAngles.y = SceneKitConversions.float(game.player.facingAngle)
 
             guard let body = node.childNode(withName: PlayerNodeFactory.NodeName.body, recursively: true),
-                  let armPivot = node.childNode(withName: PlayerNodeFactory.NodeName.armPivot, recursively: true)
+                  let head = node.childNode(withName: PlayerNodeFactory.NodeName.head, recursively: true),
+                  let armPivot = node.childNode(withName: PlayerNodeFactory.NodeName.armPivot, recursively: true),
+                  let forearmPivot = node.childNode(withName: PlayerNodeFactory.NodeName.forearmPivot, recursively: true),
+                  let armPivotLeft = node.childNode(withName: PlayerNodeFactory.NodeName.armPivotLeft, recursively: true),
+                  let forearmPivotLeft = node.childNode(withName: PlayerNodeFactory.NodeName.forearmPivotLeft, recursively: true),
+                  let legPivotLeft = node.childNode(withName: PlayerNodeFactory.NodeName.legPivotLeft, recursively: true),
+                  let legPivotRight = node.childNode(withName: PlayerNodeFactory.NodeName.legPivotRight, recursively: true)
             else { return }
 
             if lastAxeTier != game.equippedAxe {
-                PlayerNodeFactory.rebuildAxe(in: armPivot, tier: game.equippedAxe)
+                PlayerNodeFactory.rebuildAxe(in: forearmPivot, tier: game.equippedAxe)
                 lastAxeTier = game.equippedAxe
             }
 
-            let walking = game.player.animation == .walking
-            let walkPhase = CACurrentMediaTime() * 8
-
-            // Torso: vertical bob plus a subtle twist, so the upper body
-            // reads as "walking" rather than just the legs.
-            body.position.y = walking ? Float(sin(walkPhase)) : 0
-            body.eulerAngles.y = walking ? Float(sin(walkPhase)) * 0.06 : 0
-
-            // Hip-pivot leg swing; zeroing when idle doubles as the reset,
-            // so no action bookkeeping is needed.
-            let legSwing = walking ? Float(sin(walkPhase)) * 0.5 : 0
-            node.childNode(withName: PlayerNodeFactory.NodeName.legPivotLeft, recursively: true)?
-                .eulerAngles.x = legSwing
-            node.childNode(withName: PlayerNodeFactory.NodeName.legPivotRight, recursively: true)?
-                .eulerAngles.x = -legSwing
-
+            // --- Chop swing: retriggered on the real gameplay tick, not a
+            // free-running loop. `armPivot` stands in for the whole
+            // 5-node ensemble since all five are started/stopped under
+            // the same `chopSwingKey`.
             let isChopping = game.player.animation == .chopping
-            let isSwinging = armPivot.action(forKey: PlayerNodeFactory.swingActionKey) != nil
-            if isChopping, !isSwinging {
-                armPivot.runAction(PlayerNodeFactory.swingAction(), forKey: PlayerNodeFactory.swingActionKey)
-            } else if !isChopping, isSwinging {
-                armPivot.removeAction(forKey: PlayerNodeFactory.swingActionKey)
-                // Tracked under the same key as the swing so the walk
-                // cycle below waits for the ease-back to finish instead
-                // of fighting it for control of the pivot.
-                armPivot.runAction(PlayerNodeFactory.restAction(), forKey: PlayerNodeFactory.swingActionKey)
-            } else if !isChopping, !isSwinging {
-                // Arm swing, opposite phase to the leg on the same side
-                // (contralateral gait) — right arm forward with left leg.
-                armPivot.eulerAngles.x = -legSwing
+            if isChopping {
+                let strikeChanged = game.lastChopStrike?.id != lastHandledStrikeID
+                let isAnimating = armPivot.action(forKey: PlayerNodeFactory.chopSwingKey) != nil
+                if strikeChanged || !isAnimating {
+                    lastHandledStrikeID = game.lastChopStrike?.id
+                    let interval = GameData.tickInterval * (game.isExhausted ? GameData.exhaustedTickMultiplier : 1)
+                    PlayerNodeFactory.applyChopSwing(
+                        body: body, armPivot: armPivot, forearmPivot: forearmPivot,
+                        armPivotLeft: armPivotLeft, forearmPivotLeft: forearmPivotLeft,
+                        duration: interval
+                    )
+                    if strikeChanged, let event = game.lastChopStrike, event.success {
+                        playChopImpact(event: event, game: game)
+                    }
+                }
+                isChopSwingActive = true
+            } else if isChopSwingActive {
+                // One-shot: ease to rest, then let this flag stay false so
+                // subsequent frames don't keep restarting the ease before
+                // it can ever finish.
+                PlayerNodeFactory.easeChopToRest(
+                    body: body, armPivot: armPivot, forearmPivot: forearmPivot,
+                    armPivotLeft: armPivotLeft, forearmPivotLeft: forearmPivotLeft
+                )
+                isChopSwingActive = false
             }
 
-            // Left arm never fights an axe action, so it always tracks
-            // the walk cycle directly.
-            node.childNode(withName: PlayerNodeFactory.NodeName.armPivotLeft, recursively: true)?
-                .eulerAngles.x = legSwing
+            // Hip-pivot leg swing; zeroing when idle doubles as the reset,
+            // so no action bookkeeping is needed. Legs are never touched
+            // by the chop ensemble, so this always runs unconditionally.
+            let walking = game.player.animation == .walking
+            let walkPhase = CACurrentMediaTime() * 8
+            let legSwing = walking ? Float(sin(walkPhase)) * 0.5 : 0
+            legPivotLeft.eulerAngles.x = legSwing
+            legPivotRight.eulerAngles.x = -legSwing
+
+            // Torso/arm/head idle & walk pose — skipped entirely while the
+            // chop ensemble (or its rest-ease) is still animating, so it
+            // can't fight those nodes for control mid-swing.
+            if armPivot.action(forKey: PlayerNodeFactory.chopSwingKey) == nil {
+                if walking {
+                    // Torso: a double-bounce vertical dip (once per
+                    // footfall, not once per stride) plus a subtle twist
+                    // and forward lean, so the upper body reads as
+                    // "walking with purpose" rather than just the legs.
+                    body.position.y = Float(sin(2 * walkPhase)) * 0.5
+                    body.eulerAngles.y = Float(sin(walkPhase)) * 0.06
+                    body.eulerAngles.x = SceneKitConversions.radians(fromDegrees: -3.4)
+
+                    // Arms swing opposite phase to the leg on the same
+                    // side (contralateral gait), at a lower amplitude than
+                    // the legs, with a synced elbow flex that bends more
+                    // at the back of each swing.
+                    let armSwing = legSwing * 0.7
+                    let elbowFlex = max(0, Float(sin(walkPhase))) * 20
+                    let elbowFlexLeft = max(0, Float(sin(walkPhase + .pi))) * 20
+                    armPivot.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.shoulderX)) - armSwing
+                    armPivot.eulerAngles.z = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.shoulderZ))
+                    forearmPivot.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.elbowX)) + SceneKitConversions.radians(fromDegrees: Double(elbowFlex))
+                    armPivotLeft.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.shoulderLeftX)) + armSwing
+                    forearmPivotLeft.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.elbowLeftX)) + SceneKitConversions.radians(fromDegrees: Double(elbowFlexLeft))
+                    head.eulerAngles.z = 0
+                } else {
+                    // Idle: a slow, low-amplitude breathing sway so the
+                    // character isn't a static mannequin while standing
+                    // still — a gentle chest rise and faint head sway,
+                    // clearly slower/subtler than the walk cycle.
+                    let idlePhase = CACurrentMediaTime() * 1.1
+                    let chestRise = Float(sin(idlePhase)) * 0.03
+                    body.position.y = Float(sin(idlePhase)) * 0.5
+                    body.eulerAngles.x = 0
+                    body.eulerAngles.y = 0
+                    armPivot.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.shoulderX)) + chestRise
+                    armPivot.eulerAngles.z = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.shoulderZ))
+                    forearmPivot.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.elbowX))
+                    armPivotLeft.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.shoulderLeftX)) + chestRise
+                    forearmPivotLeft.eulerAngles.x = SceneKitConversions.radians(fromDegrees: Double(PlayerNodeFactory.RestPose.elbowLeftX))
+                    head.eulerAngles.z = Float(sin(idlePhase * 0.5)) * 0.02
+                }
+            }
+        }
+
+        /// Spawns a wood-chip burst and a brief recoil wobble on the
+        /// struck tree, called only on successful chop-tick attempts
+        /// (misses still swing the axe, just produce no feedback).
+        private func playChopImpact(event: ChopStrikeEvent, game: GameState) {
+            guard let treeNode = treeNodes[event.treeKey] else { return }
+            let species = game.worldTrees.first(where: { $0.key == event.treeKey })?.species ?? .oak
+            let impactPoint = SceneKitConversions.vector(event.worldPosition, height: 20)
+            let seed = UInt64(bitPattern: Int64(event.id.hashValue))
+
+            let burst = ImpactEffects.woodChipBurst(at: impactPoint, species: species, seed: seed)
+            scene.rootNode.addChildNode(burst)
+            treeNode.runAction(ImpactEffects.treeShake(seed: seed), forKey: "impactShake")
         }
 
         private func setUpLights() {
