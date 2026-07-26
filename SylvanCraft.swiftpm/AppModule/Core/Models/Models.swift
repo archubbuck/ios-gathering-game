@@ -189,6 +189,17 @@ struct XPDrop: Identifiable, Equatable {
     let amount: Double
 }
 
+/// Fired on every real chop-tick attempt (success or miss) so the SceneKit
+/// layer can retrigger the axe-swing animation in lockstep with gameplay,
+/// rather than looping independently of it. `success` gates whether the
+/// swing also spawns impact feedback (wood-chip burst + tree shake).
+struct ChopStrikeEvent: Identifiable, Equatable {
+    let id = UUID()
+    let treeKey: String
+    let success: Bool
+    let worldPosition: CGPoint
+}
+
 // MARK: - Persistence snapshot
 
 struct PlayerSave: Codable {
