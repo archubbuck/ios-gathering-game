@@ -308,7 +308,7 @@ enum PlayerNodeFactory {
             rotate.timingMode = phase.timing
             bodyRotateSteps.append(rotate)
 
-            let move = SCNAction.moveTo(x: 0, y: CGFloat(phase.torsoDipY), z: 0, duration: stepDuration)
+            let move = SCNAction.moveTo(SCNVector3(0, phase.torsoDipY, 0), duration: stepDuration)
             move.timingMode = phase.timing
             bodyMoveSteps.append(move)
         }
@@ -336,7 +336,7 @@ enum PlayerNodeFactory {
 
         let rotate = SCNAction.rotateTo(x: 0, y: 0, z: 0, duration: duration, usesShortestUnitArc: true)
         rotate.timingMode = .easeOut
-        let move = SCNAction.moveTo(x: 0, y: 0, z: 0, duration: duration)
+        let move = SCNAction.moveTo(SCNVector3(0, 0, 0), duration: duration)
         move.timingMode = .easeOut
         body.runAction(.group([rotate, move]), forKey: chopSwingKey)
     }
