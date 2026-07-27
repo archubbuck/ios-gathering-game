@@ -89,6 +89,11 @@ struct PlayerState: Codable {
     var dwellStart: Date? = nil
     /// Key of the tree the player is currently dwelling on.
     var dwellTargetKey: String? = nil
+
+    /// Key of the under-leveled tree the player is currently nearest to,
+    /// so the level-gate warning fires once per approach rather than every
+    /// frame. Nil when not near any under-leveled tree.
+    var blockedTreeKey: String? = nil
 }
 
 /// Uniquely identifies a world chunk.
@@ -105,6 +110,10 @@ struct WorldTreeState: Identifiable, Codable {
     var worldPosition: CGPoint
     var logsRemaining: Int
     var respawnUntil: Date?
+    /// Stable id for the cluster this tree was generated as part of:
+    /// "\(chunkX):\(chunkY):\(clusterIdx)". Lets the minimap group trees
+    /// into cluster indicators without re-parsing `key`.
+    let clusterID: String
 
     var id: String { key }
 
@@ -187,6 +196,15 @@ struct EventLogEntry: Identifiable, Equatable {
 struct XPDrop: Identifiable, Equatable {
     let id = UUID()
     let amount: Double
+}
+
+/// Fired once when the player approaches a tree whose Woodcutting level
+/// requirement exceeds their own, so the HUD can tell them why nothing is
+/// happening instead of silently doing nothing.
+struct LevelGateWarning: Identifiable, Equatable {
+    let id = UUID()
+    let species: TreeSpecies
+    let requiredLevel: Int
 }
 
 /// Fired on every real chop-tick attempt (success or miss) so the SceneKit

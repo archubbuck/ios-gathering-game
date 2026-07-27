@@ -16,8 +16,12 @@ let package = Package(
             bundleVersion: "1",
             appIcon: .asset("AppIcon"),
             accentColor: .presetColor(.green),
-            supportedDeviceFamilies: [.phone],
-            supportedInterfaceOrientations: [.portrait]
+            supportedDeviceFamilies: [.phone, .pad],
+            supportedInterfaceOrientations: [
+                .portrait,
+                .landscapeLeft(.when(deviceFamilies: [.pad])),
+                .landscapeRight(.when(deviceFamilies: [.pad])),
+            ]
         )
     ],
     targets: [

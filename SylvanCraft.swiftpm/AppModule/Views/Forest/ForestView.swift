@@ -30,56 +30,76 @@ struct ForestView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HUDBar()
+        GeometryReader { rootGeo in
+            let hudScale = DeviceScale.hud(for: rootGeo.size)
 
-            GeometryReader { _ in
-                ZStack {
-                    // Low-poly 3D forest scene: ground, trees, and player.
-                    // Drag-to-move attaches to the scene itself (not the
-                    // ZStack) so overlay buttons stay clean tap targets.
-                    // Pinch-to-zoom is layered on as a simultaneous gesture
-                    // so it doesn't steal touches from drag-to-move.
-                    ForestSceneView(hudBridge: hudBridge)
-                        .playerMovement()
-                        .simultaneousGesture(pinchToZoomGesture)
+            VStack(spacing: 0) {
+                HUDBar(scale: hudScale)
 
-                    // Chop/dwell progress ring above whichever tree is
-                    // relevant, projected from 3D by SceneHUDBridge.
-                    if let point = hudBridge.screenPoint, let target = hudBridge.target {
-                        ChopDwellOverlay(target: target, axeTier: game.equippedAxe)
-                            .position(point)
-                            .zIndex(9)
+                GeometryReader { _ in
+                    ZStack {
+                        // Low-poly 3D forest scene: ground, trees, and player.
+                        // Drag-to-move attaches to the scene itself (not the
+                        // ZStack) so overlay buttons stay clean tap targets.
+                        // Pinch-to-zoom is layered on as a simultaneous gesture
+                        // so it doesn't steal touches from drag-to-move.
+                        ForestSceneView(hudBridge: hudBridge)
+                            .playerMovement()
+                            .simultaneousGesture(pinchToZoomGesture)
+
+                        // Chop/dwell progress ring above whichever tree is
+                        // relevant, projected from 3D by SceneHUDBridge.
+                        if let point = hudBridge.screenPoint, let target = hudBridge.target {
+                            ChopDwellOverlay(target: target, axeTier: game.equippedAxe)
+                                .position(point)
+                                .zIndex(9)
+                        }
+
+                        // XP drop overlay above the active tree.
+                        if let drop = game.lastXPDrop, let point = hudBridge.screenPoint {
+                            XPDropOverlay(drop: drop)
+                                .id(drop.id)
+                                .position(x: point.x, y: point.y - 20)
+                                .zIndex(10)
+                        }
+
+                        // Level-up celebration banner.
+                        if let level = levelUpBanner {
+                            LevelUpBanner(level: level)
+                                .zIndex(20)
+                                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                        }
+
+                        // Woodcutting-level-too-low warning toast.
+                        if let warning = game.levelGateWarning {
+                            LevelGateToast(warning: warning)
+                                .id(warning.id)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                .padding(.top, 8)
+                                .zIndex(20)
+                        }
+
+                        // Minimap, top-trailing.
+                        MinimapView(scale: hudScale)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                            .zIndex(15)
+
+                        // Watch Ad prompt, floating bottom-leading (opposite the
+                        // minimap) so it never shifts other HUD content.
+                        AdBoostFloatingButton()
+                            .padding(14)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                            .zIndex(15)
                     }
-
-                    // XP drop overlay above the active tree.
-                    if let drop = game.lastXPDrop, let point = hudBridge.screenPoint {
-                        XPDropOverlay(drop: drop)
-                            .id(drop.id)
-                            .position(x: point.x, y: point.y - 20)
-                            .zIndex(10)
-                    }
-
-                    // Level-up celebration banner.
-                    if let level = levelUpBanner {
-                        LevelUpBanner(level: level)
-                            .zIndex(20)
-                            .transition(.scale(scale: 0.6).combined(with: .opacity))
-                    }
-
-                    // Minimap, top-trailing.
-                    MinimapView()
-                        .padding(10)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                        .zIndex(15)
+                    .clipped()
+                    // Frosted materials must read as *white* glass even when the
+                    // device is in dark mode; the SCNView ignores this.
+                    .environment(\.colorScheme, .light)
                 }
-                .clipped()
-                // Frosted materials must read as *white* glass even when the
-                // device is in dark mode; the SCNView ignores this.
-                .environment(\.colorScheme, .light)
             }
+            .background(SylvanTheme.hudBackground)
         }
-        .background(SylvanTheme.hudBackground)
         .onAppear {
             if lastSeenLevel == nil {
                 lastSeenLevel = game.level
