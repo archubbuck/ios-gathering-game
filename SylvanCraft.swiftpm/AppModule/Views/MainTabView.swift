@@ -13,21 +13,24 @@ struct MainTabView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             ForestView()
-                .tabItem { Label("Forest", systemImage: "tree") }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.forest)
 
             PackView()
-                .tabItem { Label("Pack", systemImage: "backpack") }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.pack)
 
             ShopView()
-                .tabItem { Label("Shop", systemImage: "cart") }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.shop)
 
             ProfileView()
-                .tabItem { Label("Profile", systemImage: "person") }
+                .toolbar(.hidden, for: .tabBar)
                 .tag(AppTab.profile)
         }
         .tint(SylvanTheme.forestGreen)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            BottomNavBar(selection: $selectedTab)
+        }
     }
 }

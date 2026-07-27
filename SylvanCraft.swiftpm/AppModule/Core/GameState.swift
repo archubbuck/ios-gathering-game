@@ -16,6 +16,9 @@ final class GameState: NSObject, ObservableObject {
     @Published private(set) var unlockedAchievements: Set<String>
     @Published private(set) var eventLog: [EventLogEntry] = []
     @Published var lastXPDrop: XPDrop?
+    /// Set once when the player approaches a tree above their Woodcutting
+    /// level, so the HUD can surface a "you need level N" message.
+    @Published var levelGateWarning: LevelGateWarning?
     /// The most recent chop-tick attempt (success or miss), used by
     /// `ForestSceneView.Coordinator` to retrigger the axe-swing animation
     /// exactly when a real gameplay tick resolves.
@@ -286,26 +289,49 @@ final class GameState: NSObject, ObservableObject {
         // Not chopping — check for nearby trees.
         guard !packIsFull else { return }
 
-        // Find the nearest eligible tree within proximity radius.
+        // Find the nearest eligible tree within proximity radius, and
+        // separately the nearest tree that's in range but above the
+        // player's Woodcutting level, so we can warn about it if it's all
+        // that's nearby.
         var best: (key: String, dist: CGFloat, species: TreeSpecies)? = nil
+        var nearestBlocked: (key: String, dist: CGFloat, species: TreeSpecies, levelReq: Int)? = nil
         for tree in worldTrees {
             guard !tree.isDepleted, tree.logsRemaining > 0 else { continue }
             let def = GameData.tree(for: tree.species)
-            guard effectiveLevel >= def.levelReq else { continue }
             let dist = hypot(tree.worldPosition.x - player.position.x,
                              tree.worldPosition.y - player.position.y)
             guard dist <= GameData.proximityRadius else { continue }
+
+            guard effectiveLevel >= def.levelReq else {
+                if nearestBlocked == nil || dist < nearestBlocked!.dist {
+                    nearestBlocked = (tree.key, dist, tree.species, def.levelReq)
+                }
+                continue
+            }
             if best == nil || dist < best!.dist {
                 best = (tree.key, dist, tree.species)
             }
         }
 
         guard let best else {
-            // No tree nearby — reset dwell.
+            // No eligible tree nearby — reset dwell.
             player.dwellStart = nil
             player.dwellTargetKey = nil
+
+            if let nearestBlocked {
+                if player.blockedTreeKey != nearestBlocked.key {
+                    player.blockedTreeKey = nearestBlocked.key
+                    levelGateWarning = LevelGateWarning(species: nearestBlocked.species, requiredLevel: nearestBlocked.levelReq)
+                    Haptics.reject()
+                }
+            } else {
+                player.blockedTreeKey = nil
+            }
             return
         }
+
+        // An eligible tree is in range — clear any stale blocked-tree state.
+        player.blockedTreeKey = nil
 
         // Check if dwelling on the same tree.
         if player.dwellTargetKey == best.key {

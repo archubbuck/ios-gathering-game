@@ -59,7 +59,8 @@ enum WorldGenerator {
                     species: species,
                     worldPosition: worldPos,
                     logsRemaining: Int.random(in: def.logsMin...def.logsMax, using: &rng),
-                    respawnUntil: nil
+                    respawnUntil: nil,
+                    clusterID: "\(coord.x):\(coord.y):\(clusterIdx)"
                 ))
             }
         }

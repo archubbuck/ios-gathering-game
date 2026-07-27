@@ -4,10 +4,15 @@ import SwiftUI
 /// and stamina.
 struct HUDBar: View {
     @EnvironmentObject private var game: GameState
-    @State private var showingAdReward = false
+
+    /// Derived from the device's available canvas size (see `DeviceScale`)
+    /// so the badge/stamina bar stay proportionate from iPhone SE to iPad
+    /// instead of staying a fixed pixel size on every device.
+    var scale: CGFloat = 1
 
     var body: some View {
         let progress = XPTable.progressToNext(xp: game.totalXP)
+        let badgeSize = 46 * scale
 
         VStack(spacing: 8) {
             HStack(spacing: 12) {
@@ -18,10 +23,10 @@ struct HUDBar: View {
                     Circle()
                         .stroke(.white, lineWidth: 2.5)
                     Text("\(game.level)")
-                        .font(.display(19))
+                        .font(.display(19 * scale))
                         .foregroundStyle(.white)
                 }
-                .frame(width: 46, height: 46)
+                .frame(width: badgeSize, height: badgeSize)
                 .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
 
                 VStack(alignment: .leading, spacing: 3) {
@@ -61,24 +66,15 @@ struct HUDBar: View {
 
             if game.isWoodcuttingBoostActive {
                 potionBoostRow
-            } else {
-                adBoostRow
             }
 
             staminaRow
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 8)
         // Sits outside the scene ZStack, so a real Material would have
         // nothing to blur — a solid light strip is the honest equivalent.
         .background(Color.white.opacity(0.95))
-        .fullScreenCover(isPresented: $showingAdReward) {
-            AdRewardOverlay {
-                game.grantAdBoost()
-                showingAdReward = false
-            }
-            .interactiveDismissDisabled(true)
-        }
     }
 
     /// Compact stamina meter spanning the full HUD width, dimming and
@@ -104,10 +100,10 @@ struct HUDBar: View {
                     Capsule().strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
                 }
             }
-            .frame(height: 14)
+            .frame(height: 14 * scale)
 
             Text("\(Int(game.stamina.rounded()))/\(Int(GameData.maxStamina.rounded()))")
-                .font(.stat(10, weight: .bold))
+                .font(.stat(10 * scale, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.8))
         }
@@ -137,50 +133,6 @@ struct HUDBar: View {
     private func formattedCountdown(_ seconds: TimeInterval) -> String {
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-
-    /// Shown whenever no boost is active: either a "Watch Ad" button (off
-    /// cooldown) or a live countdown to when it becomes available again.
-    @ViewBuilder
-    private var adBoostRow: some View {
-        if game.isAdBoostAvailable {
-            adBoostButton
-        } else if let cooldownExpiresAt = game.adBoostCooldownExpiresAt {
-            adCooldownRow(expiresAt: cooldownExpiresAt)
-        }
-    }
-
-    private var adBoostButton: some View {
-        Button {
-            showingAdReward = true
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SylvanTheme.forestGreen)
-                Text("Watch Ad: +\(GameData.woodcuttingPotionLevelBoost) Woodcutting")
-                    .font(.stat(11, weight: .semibold))
-                    .foregroundStyle(SylvanTheme.hudTextDark)
-                Spacer()
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func adCooldownRow(expiresAt: Date) -> some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
-            let remaining = max(0, expiresAt.timeIntervalSince(context.date))
-            HStack(spacing: 8) {
-                Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.4))
-                Text("Ad boost ready in \(formattedCountdown(remaining))")
-                    .font(.stat(11, weight: .semibold))
-                    .foregroundStyle(SylvanTheme.hudTextDark.opacity(0.6))
-                    .monospacedDigit()
-                Spacer()
-            }
-        }
     }
 
     private var staminaFraction: Double {
