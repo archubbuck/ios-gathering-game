@@ -108,7 +108,7 @@ enum WorldGenerator {
     }
 
     private static func combineSeed(_ seed: UInt64, coord: ChunkCoord) -> UInt64 {
-        var h = seed ^ 0xC0FFEE_BABE_DEADBEE
+        var h = seed ^ 0xC0FFEE_BABE_DEADBE
         h = h &* 0x9E3779B97F4A7C15 &+ UInt64(bitPattern: Int64(coord.x))
         h = h &* 0x9E3779B97F4A7C15 &+ UInt64(bitPattern: Int64(coord.y))
         return h
