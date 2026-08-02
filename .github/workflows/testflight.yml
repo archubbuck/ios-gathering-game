@@ -32,7 +32,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           sed -i '' "s/teamIdentifier: \"\"/teamIdentifier: \"${APPLE_TEAM_ID}\"/" \
-            SylvanCraft.swiftpm/Package.swift
+            Timberline.swiftpm/Package.swift
 
       - name: Install distribution certificate & key
         id: signing
@@ -101,15 +101,15 @@ jobs:
           security set-keychain-settings -lut 7200 build.keychain
 
       - name: Archive app
-        working-directory: SylvanCraft.swiftpm
+        working-directory: Timberline.swiftpm
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           xcodebuild archive \
-            -scheme SylvanCraft \
+            -scheme Timberline \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -archivePath "${GITHUB_WORKSPACE}/.build/SylvanCraft.xcarchive" \
+            -archivePath "${GITHUB_WORKSPACE}/.build/Timberline.xcarchive" \
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="${{ steps.signing.outputs.identity }}" \
             PROVISIONING_PROFILE="${{ steps.profile.outputs.profile_uuid }}" \
@@ -145,7 +145,7 @@ jobs:
               <string>${{ steps.signing.outputs.identity }}</string>
               <key>provisioningProfiles</key>
               <dict>
-                  <key>com.adamchubbuck.sylvancraft</key>
+                  <key>com.adamchubbuck.timberline</key>
                   <string>${{ steps.profile.outputs.profile_uuid }}</string>
               </dict>
           </dict>
@@ -153,7 +153,7 @@ jobs:
           PLIST
 
           xcodebuild -exportArchive \
-            -archivePath .build/SylvanCraft.xcarchive \
+            -archivePath .build/Timberline.xcarchive \
             -exportOptionsPlist .build/exportOptions.plist \
             -exportPath .build/output \
             -authenticationKeyID "${{ secrets.APPLE_KEY_ID }}" \

@@ -8,11 +8,11 @@ on:
   push:
     branches: [main]
     paths:
-      - 'SylvanCraft.swiftpm/**'
+      - 'Timberline.swiftpm/**'
       - '.github/workflows/build-check.yml'
   pull_request:
     paths:
-      - 'SylvanCraft.swiftpm/**'
+      - 'Timberline.swiftpm/**'
       - '.github/workflows/build-check.yml'
   workflow_dispatch:
 
@@ -27,15 +27,15 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Show available schemes (diagnostic)
-        working-directory: SylvanCraft.swiftpm
+        working-directory: Timberline.swiftpm
         run: xcodebuild -list || true
 
       - name: Build for iOS Simulator (no signing)
-        working-directory: SylvanCraft.swiftpm
+        working-directory: Timberline.swiftpm
         run: |
           set -o pipefail
           xcodebuild build \
-            -scheme SylvanCraft \
+            -scheme Timberline \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_IDENTITY=""
