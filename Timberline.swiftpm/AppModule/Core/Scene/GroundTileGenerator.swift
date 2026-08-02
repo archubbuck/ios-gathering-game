@@ -31,7 +31,7 @@ enum GroundTileGenerator {
         if let image = UIImage(named: "Grass_Tileable", in: Bundle.module, with: nil) {
             material.diffuse.contents = image
         } else {
-            material.diffuse.contents = TimberlineTheme.Scene3D.ground
+            material.diffuse.contents = TimberlineTheme.Scene3D.dirt
         }
         material.diffuse.wrapS = .repeat
         material.diffuse.wrapT = .repeat
