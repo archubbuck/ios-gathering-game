@@ -10,7 +10,7 @@ let package = Package(
         .iOSApplication(
             name: "Timberline",
             targets: ["AppModule"],
-            bundleIdentifier: "com.adamchubbuck.timberline",
+            bundleIdentifier: "com.timberline.app",
             teamIdentifier: "",
             displayVersion: "1.0",
             bundleVersion: "1",
