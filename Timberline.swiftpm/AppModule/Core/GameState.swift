@@ -766,18 +766,6 @@ final class GameState: NSObject, ObservableObject {
         camera.snap(to: .zero)
     }
 
-        camera.snap(to: .zero)
-
-        worldTrees = ChunkManager.generateInitial(around: .zero)
-        worldPickups = ChunkManager.generateInitialPickups(around: .zero)
-        loadedChunks = ChunkManager.loadedChunkSet(around: .zero)
-        activeBoostExpiresAt = nil
-
-        eventLog = []
-        recordEvent(.info, "A fresh start. Welcome to the forest.")
-        saveNow()
-    }
-
     // MARK: Debug (Phase 1 only — removed once real screens land)
 
     func debugAddXP(_ amount: Double) {
