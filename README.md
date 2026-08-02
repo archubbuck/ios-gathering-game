@@ -1,4 +1,4 @@
-# Sylvan Craft
+# Timberline
 
 [![Build Check](https://github.com/archubbuck/ios-gathering-game/actions/workflows/build-check.yml/badge.svg)](https://github.com/archubbuck/ios-gathering-game/actions/workflows/build-check.yml)
 
@@ -12,8 +12,7 @@ assets); HUD and menus are SwiftUI. The repo contains no image assets
 except the app icon.
 
 - **Platform:** iOS 16.0+, iPhone, portrait only
-- **App package:** `SylvanCraft.swiftpm` (Swift Playgrounds app package —
-  opens in Xcode or Swift Playgrounds 4)
+- **App package:** `Timberline.swiftpm` (Xcode-compatible Swift package)
 - **PRD:** [`sylvan_craft_project_prd.md`](sylvan_craft_project_prd.md)
 
 ## Gameplay
@@ -44,7 +43,7 @@ all compiling:
 (Settings → Secrets and variables → Actions):
 
 1. `APPLE_TEAM_ID` — Apple Developer Team ID.
-2. Create the App ID `com.adamchubbuck.sylvancraft`
+2. Create the App ID `com.adamchubbuck.timberline`
    (developer.apple.com → Certificates, Identifiers & Profiles).
 3. `DIST_CERT_BASE64` / `DIST_KEY_BASE64` — base64 of an Apple
    Distribution certificate and its private key.
@@ -69,3 +68,5 @@ signing-free on `build-check.yml`.
   backgrounding. No SwiftData (iOS 16 floor).
 - **Balance data:** every tree/axe/region/achievement number lives in
   `Core/GameData.swift` — tuning never touches logic.
+- **AI workflow:** see `AI-GUARDRAILS.md` for project-specific agent instructions,
+  feature guardrails, naming conventions, and world-save determinism rules.

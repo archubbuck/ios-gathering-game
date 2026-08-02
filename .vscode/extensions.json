@@ -1,5 +1,6 @@
 {
     "recommendations": [
-        "assettoollabs.mesh-viewer-vscode"
+        "assettoollabs.mesh-viewer-vscode",
+        "swiftlang.swift-vscode"
     ]
 }

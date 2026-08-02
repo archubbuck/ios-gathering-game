@@ -1,6 +1,6 @@
 name: Release Swift Playgrounds App
 
-# Publishes SylvanCraft.swiftpm as a downloadable zip attached to a GitHub
+# Publishes Timberline.swiftpm as a downloadable zip attached to a GitHub
 # Release, so it can be grabbed and opened directly in Swift Playgrounds
 # without cloning the repo.
 on:
@@ -36,14 +36,14 @@ jobs:
             echo "::error::APPLE_TEAM_ID repository secret is not set (Settings > Secrets and variables > Actions)"
             exit 1
           fi
-          sed -i "s/teamIdentifier: \"\"/teamIdentifier: \"${APPLE_TEAM_ID}\"/" SylvanCraft.swiftpm/Package.swift
+          sed -i "s/teamIdentifier: \"\"/teamIdentifier: \"${APPLE_TEAM_ID}\"/" Timberline.swiftpm/Package.swift
 
-      - name: Zip SylvanCraft.swiftpm
-        run: zip -r SylvanCraft.swiftpm.zip SylvanCraft.swiftpm
+      - name: Zip Timberline.swiftpm
+        run: zip -r Timberline.swiftpm.zip Timberline.swiftpm
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          files: SylvanCraft.swiftpm.zip
+          files: Timberline.swiftpm.zip
           generate_release_notes: true
