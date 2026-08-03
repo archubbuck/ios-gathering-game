@@ -202,7 +202,7 @@ struct ForestSceneView: UIViewRepresentable {
         if let url = Bundle.module.url(forResource: "Skiller", withExtension: "usdz", subdirectory: "Character"),
            let assetEntity = try? Entity.loadModel(contentsOf: url) {
             let entity = assetEntity
-            normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
+            Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
             entity.position = SIMD3<Float>(0, 0, 0)
             return entity
         }
@@ -210,7 +210,7 @@ struct ForestSceneView: UIViewRepresentable {
         // Fallback to legacy named lookup
         if let assetEntity = try? Entity.loadModel(named: "Skiller") {
             let entity = assetEntity
-            normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
+            Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
             entity.position = SIMD3<Float>(0, 0, 0)
             return entity
         }
