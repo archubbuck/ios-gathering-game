@@ -130,7 +130,7 @@ struct ForestSceneView: UIViewRepresentable {
                     }
                 }
 
-                let entity = Self.makeTreeEntity(species: tree.species, isFelled: isFelled)
+                let entity = ForestSceneView.makeTreeEntity(species: tree.species, isFelled: isFelled)
                 entity.position = SIMD3<Float>(
                     Float(tree.worldPosition.x),
                     0.0,
