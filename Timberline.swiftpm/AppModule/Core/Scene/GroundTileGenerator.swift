@@ -1,4 +1,5 @@
 import RealityKit
+import SceneKit
 import SwiftUI
 import UIKit
 
@@ -24,6 +25,23 @@ enum GroundTileGenerator {
         entity.transform.rotation = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(1, 0, 0))
         entity.name = "groundTile"
         return entity
+    }
+
+    static func makeTileNode(coord: ChunkCoord) -> SCNNode {
+        let plane = SCNPlane(width: tileSize, height: tileSize)
+        plane.firstMaterial = SCNMaterial()
+        plane.firstMaterial?.diffuse.contents = UIColor(TimberlineTheme.Scene3D.dirt)
+        plane.firstMaterial?.isDoubleSided = true
+
+        let node = SCNNode(geometry: plane)
+        node.name = "groundTile"
+        node.eulerAngles = SCNVector3(-Float.pi / 2, 0, 0)
+        node.position = SCNVector3(
+            Float(worldPosition(for: coord).x),
+            0,
+            Float(worldPosition(for: coord).y)
+        )
+        return node
     }
 
     static func worldPosition(for coord: ChunkCoord) -> CGPoint {

@@ -70,8 +70,11 @@ final class SceneHUDBridge: ObservableObject {
 
     private func project(_ worldPosition: CGPoint, in scnView: SCNView?, arView: ARView?) -> CGPoint? {
         if let arView {
-            let projected = arView.project(SIMD3<Float>(Float(worldPosition.x), Float(Self.ringHeight), Float(worldPosition.y)))
-            return CGPoint(x: projected.x, y: projected.y)
+            let projected = arView.project(
+                SIMD3<Float>(Float(worldPosition.x), Float(Self.ringHeight), Float(worldPosition.y))
+            )
+            guard let projected else { return nil }
+            return CGPoint(x: CGFloat(projected.x), y: CGFloat(projected.y))
         }
 
         guard let scnView else { return nil }
