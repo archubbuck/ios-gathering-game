@@ -21,8 +21,9 @@ final class WorldTreeStreamer {
             groundTiles[coord] = tile
         }
 
-        for (coord, node) in groundTiles where !desired.contains(coord) {
-            node.removeFromParentNode()
+        let staleCoords = groundTiles.keys.filter { !desired.contains($0) }
+        for coord in staleCoords {
+            groundTiles[coord]?.removeFromParentNode()
             groundTiles.removeValue(forKey: coord)
         }
     }

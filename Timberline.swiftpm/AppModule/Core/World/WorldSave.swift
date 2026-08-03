@@ -41,9 +41,12 @@ struct SplitMix64: RandomNumberGenerator {
 enum WorldSaveStore {
     static let currentSchemaVersion = 1
     private static var cachedCurrent: WorldSave?
+    private static let currentLock = NSLock()
 
     static var current: WorldSave {
         get {
+            currentLock.lock()
+            defer { currentLock.unlock() }
             if let cachedCurrent {
                 return cachedCurrent
             }
@@ -52,6 +55,8 @@ enum WorldSaveStore {
             return loaded
         }
         set {
+            currentLock.lock()
+            defer { currentLock.unlock() }
             cachedCurrent = newValue
         }
     }

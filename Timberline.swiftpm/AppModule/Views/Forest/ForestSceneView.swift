@@ -141,8 +141,9 @@ struct ForestSceneView: UIViewRepresentable {
                 treeEntities[tree.key] = entity
             }
 
-            for (key, entity) in treeEntities where !seenKeys.contains(key) {
-                entity.removeFromParent()
+            let staleTreeKeys = treeEntities.keys.filter { !seenKeys.contains($0) }
+            for key in staleTreeKeys {
+                treeEntities[key]?.removeFromParent()
                 treeEntities.removeValue(forKey: key)
             }
 
