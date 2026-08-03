@@ -1,13 +1,11 @@
+import ARKit
 import CoreGraphics
+import RealityKit
 import SceneKit
 
 /// Publishes the single on-screen projection of whichever tree currently
 /// matters to the HUD — the tree being chopped, or the one the player is
-/// dwelling near just before chopping starts. `GameState` only ever tracks
-/// one such tree at a time (single-target proximity chopping), so there's
-/// only ever one point to project per frame via `SCNView.projectPoint(_:)`,
-/// not one per visible tree — this is what lets the old per-tree overlay
-/// `ForEach` be retired.
+/// dwelling near just before chopping starts.
 @MainActor
 final class SceneHUDBridge: ObservableObject {
     enum Target: Equatable {
@@ -34,8 +32,8 @@ final class SceneHUDBridge: ObservableObject {
     private var pendingScreenPoint: CGPoint?
     private var pendingTarget: Target?
 
-    func update(game: GameState, scnView: SCNView?) {
-        let (newPoint, newTarget) = computeState(game: game, scnView: scnView)
+    func update(game: GameState, scnView: SCNView? = nil, arView: ARView? = nil) {
+        let (newPoint, newTarget) = computeState(game: game, scnView: scnView, arView: arView)
 
         guard newPoint != screenPoint || newTarget != target else { return }
 
@@ -52,27 +50,31 @@ final class SceneHUDBridge: ObservableObject {
         }
     }
 
-    private func computeState(game: GameState, scnView: SCNView?) -> (CGPoint?, Target?) {
-        guard let scnView else { return (nil, nil) }
-
+    private func computeState(game: GameState, scnView: SCNView?, arView: ARView?) -> (CGPoint?, Target?) {
         if let key = game.activeChopTreeKey,
            let tree = game.worldTrees.first(where: { $0.key == key })
         {
-            let point = project(tree.worldPosition, in: scnView)
+            let point = project(tree.worldPosition, in: scnView, arView: arView)
             return (point, .chopping(progress: depletionProgress(for: tree)))
         }
 
         if let key = game.player.dwellTargetKey,
            let tree = game.worldTrees.first(where: { $0.key == key })
         {
-            let point = project(tree.worldPosition, in: scnView)
+            let point = project(tree.worldPosition, in: scnView, arView: arView)
             return (point, .dwelling(progress: dwellProgress(for: game)))
         }
 
         return (nil, nil)
     }
 
-    private func project(_ worldPosition: CGPoint, in scnView: SCNView) -> CGPoint {
+    private func project(_ worldPosition: CGPoint, in scnView: SCNView?, arView: ARView?) -> CGPoint? {
+        if let arView {
+            let projected = arView.project(SIMD3<Float>(Float(worldPosition.x), Float(Self.ringHeight), Float(worldPosition.y)))
+            return CGPoint(x: projected.x, y: projected.y)
+        }
+
+        guard let scnView else { return nil }
         let worldPoint = SceneKitConversions.vector(worldPosition, height: Self.ringHeight)
         let projected = scnView.projectPoint(worldPoint)
         return CGPoint(

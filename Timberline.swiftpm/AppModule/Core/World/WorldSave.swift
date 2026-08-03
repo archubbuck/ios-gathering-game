@@ -8,9 +8,27 @@ struct WorldSave: Codable {
     var felledTreeIDs: Set<String> = []
 
     static var newWorld: WorldSave {
-        var rng = SystemRandomNumberGenerator()
+        var rng = SplitMix64(seed: 0xC0FFEE_BABE_DEADBE)
         let seed = UInt64.random(in: UInt64.min...UInt64.max, using: &rng)
         return WorldSave(worldSeed: seed)
+    }
+}
+
+/// Deterministic 64-bit PRNG used by world generation and save creation.
+struct SplitMix64: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed &+ 0x9E3779B97F4A7C15
+    }
+
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        z = z ^ (z >> 31)
+        return z
     }
 }
 
