@@ -26,11 +26,15 @@ struct ForestSceneView: UIViewRepresentable {
 
         let animationController = SkillerAnimationController(rootEntity: player)
 
+        let camera = PerspectiveCamera()
+        anchor.addChild(camera)
+
         context.coordinator.arView = arView
         context.coordinator.anchor = anchor
         context.coordinator.playerEntity = player
         context.coordinator.groundEntity = ground
         context.coordinator.animationController = animationController
+        context.coordinator.cameraEntity = camera
 
         arView.scene.anchors.append(anchor)
         return arView
@@ -51,6 +55,7 @@ struct ForestSceneView: UIViewRepresentable {
         var playerEntity: Entity?
         var groundEntity: ModelEntity?
         var animationController: SkillerAnimationController?
+        var cameraEntity: PerspectiveCamera?
         var treeEntities: [String: Entity] = [:]
         var groundTiles: [ChunkCoord: ModelEntity] = [:]
         var lastChopStrikeID: UUID?
@@ -92,7 +97,7 @@ struct ForestSceneView: UIViewRepresentable {
                 animationController?.setMovement(isMoving: false, isRunning: false)
             }
 
-            if let arView {
+            if let cameraEntity {
                 let target = SIMD3<Float>(
                     Float(game.player.position.x),
                     0,
@@ -100,7 +105,7 @@ struct ForestSceneView: UIViewRepresentable {
                 )
                 let cameraPosition = SIMD3<Float>(target.x, 8, target.z + 10)
                 let cameraRotation = simd_quatf(angle: -.pi / 4, axis: SIMD3<Float>(1, 0, 0))
-                arView.cameraTransform = Transform(
+                cameraEntity.transform = Transform(
                     scale: SIMD3<Float>(repeating: 1),
                     rotation: cameraRotation,
                     translation: cameraPosition
