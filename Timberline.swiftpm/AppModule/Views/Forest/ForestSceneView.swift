@@ -10,6 +10,11 @@ struct ForestSceneView: UIViewRepresentable {
     @EnvironmentObject private var game: GameState
     @ObservedObject var hudBridge: SceneHUDBridge
 
+    private enum VisualScale {
+        static let playerHeight: Float = 58
+        static let stumpHeight: Float = 18
+    }
+
     @MainActor
     func makeUIView(context: Context) -> ARView {
         let arView = ARView(frame: .zero)
@@ -145,7 +150,6 @@ struct ForestSceneView: UIViewRepresentable {
                             0.0,
                             Float(tree.worldPosition.y)
                         )
-                        existing.scale = SIMD3<Float>(repeating: 0.35)
                         continue
                     }
                 }
@@ -156,7 +160,6 @@ struct ForestSceneView: UIViewRepresentable {
                     0.0,
                     Float(tree.worldPosition.y)
                 )
-                entity.scale = SIMD3<Float>(repeating: 0.35)
                 anchor.addChild(entity)
                 treeEntities[tree.key] = entity
             }
@@ -199,7 +202,7 @@ struct ForestSceneView: UIViewRepresentable {
         if let url = Bundle.module.url(forResource: "Skiller", withExtension: "usdz", subdirectory: "Character"),
            let assetEntity = try? Entity.loadModel(contentsOf: url) {
             let entity = assetEntity
-            entity.scale = SIMD3<Float>(repeating: 0.08)
+            normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
             entity.position = SIMD3<Float>(0, 0, 0)
             return entity
         }
@@ -207,7 +210,7 @@ struct ForestSceneView: UIViewRepresentable {
         // Fallback to legacy named lookup
         if let assetEntity = try? Entity.loadModel(named: "Skiller") {
             let entity = assetEntity
-            entity.scale = SIMD3<Float>(repeating: 0.08)
+            normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
             entity.position = SIMD3<Float>(0, 0, 0)
             return entity
         }
@@ -262,7 +265,7 @@ struct ForestSceneView: UIViewRepresentable {
         let subdir = isFelled ? "Environment/Stumps" : "Environment/Trees"
         if let assetEntity = loadCachedModel(named: assetName, subdirectory: subdir) {
             let entity = assetEntity
-            entity.scale = SIMD3<Float>(repeating: 0.35)
+            normalizeModelScale(entity, targetHeight: targetTreeHeight(for: species, isFelled: isFelled))
             entity.position = SIMD3<Float>(0, 0, 0)
             entity.name = isFelled ? "stump" : "tree"
             return entity
@@ -271,7 +274,7 @@ struct ForestSceneView: UIViewRepresentable {
         // Fallback to legacy named lookup
         if let assetEntity = try? Entity.loadModel(named: assetName) {
             let entity = assetEntity
-            entity.scale = SIMD3<Float>(repeating: 0.35)
+            normalizeModelScale(entity, targetHeight: targetTreeHeight(for: species, isFelled: isFelled))
             entity.position = SIMD3<Float>(0, 0, 0)
             entity.name = isFelled ? "stump" : "tree"
             return entity
@@ -308,5 +311,26 @@ struct ForestSceneView: UIViewRepresentable {
         guard let loaded else { return nil }
         modelPrototypeCache[cacheKey] = loaded
         return loaded.clone(recursive: true)
+    }
+
+    @MainActor
+    private static func normalizeModelScale(_ entity: Entity, targetHeight: Float) {
+        let currentHeight = entity.visualBounds(relativeTo: nil).extents.y
+        guard currentHeight > 0.0001 else { return }
+        let multiplier = targetHeight / currentHeight
+        entity.scale *= SIMD3<Float>(repeating: multiplier)
+    }
+
+    private static func targetTreeHeight(for species: TreeSpecies, isFelled: Bool) -> Float {
+        if isFelled { return VisualScale.stumpHeight }
+
+        switch species {
+        case .birch: return 92
+        case .oak: return 90
+        case .willow: return 88
+        case .evergreen: return 80
+        case .ancientYew: return 98
+        case .elderwood: return 106
+        }
     }
 }
