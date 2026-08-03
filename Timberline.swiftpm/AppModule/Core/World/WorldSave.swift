@@ -3,14 +3,20 @@ import Foundation
 /// Persisted world state for Timberline: a fixed world seed and the
 /// set of felled tree IDs that should remain stumps across launches.
 struct WorldSave: Codable {
-    var schemaVersion: Int = WorldSaveStore.currentSchemaVersion
+    // Keep a literal default so decoding older/missing-key payloads can
+    // still materialize a valid save without touching WorldSaveStore
+    // during static initialization.
+    var schemaVersion: Int = 1
     var worldSeed: UInt64
     var felledTreeIDs: Set<String> = []
 
     static var newWorld: WorldSave {
         var rng = SplitMix64(seed: 0xC0FFEE_BABE_DEADBE)
         let seed = UInt64.random(in: UInt64.min...UInt64.max, using: &rng)
-        return WorldSave(worldSeed: seed)
+        return WorldSave(
+            schemaVersion: WorldSaveStore.currentSchemaVersion,
+            worldSeed: seed
+        )
     }
 }
 
@@ -34,7 +40,21 @@ struct SplitMix64: RandomNumberGenerator {
 
 enum WorldSaveStore {
     static let currentSchemaVersion = 1
-    static var current = loadOrCreate()
+    private static var cachedCurrent: WorldSave?
+
+    static var current: WorldSave {
+        get {
+            if let cachedCurrent {
+                return cachedCurrent
+            }
+            let loaded = loadOrCreate()
+            cachedCurrent = loaded
+            return loaded
+        }
+        set {
+            cachedCurrent = newValue
+        }
+    }
 
     private static var directory: URL {
         let base = FileManager.default.urls(
@@ -52,7 +72,7 @@ enum WorldSaveStore {
         }
 
         let fresh = WorldSave.newWorld
-        save(fresh)
+        persistToDisk(fresh)
         return fresh
     }
 
@@ -80,6 +100,10 @@ enum WorldSaveStore {
 
     static func save(_ worldSave: WorldSave) {
         current = worldSave
+        persistToDisk(worldSave)
+    }
+
+    private static func persistToDisk(_ worldSave: WorldSave) {
         let fm = FileManager.default
         do {
             try fm.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -99,7 +123,8 @@ enum WorldSaveStore {
         let fm = FileManager.default
         try? fm.removeItem(at: saveURL)
         try? fm.removeItem(at: backupURL)
-        current = WorldSave.newWorld
-        save(current)
+        let fresh = WorldSave.newWorld
+        current = fresh
+        persistToDisk(fresh)
     }
 }
