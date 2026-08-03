@@ -10,9 +10,10 @@ struct ForestSceneView: UIViewRepresentable {
     @EnvironmentObject private var game: GameState
     @ObservedObject var hudBridge: SceneHUDBridge
 
+    @MainActor
     func makeUIView(context: Context) -> ARView {
         let arView = ARView(frame: .zero)
-        arView.environment.background = .color(TimberlineTheme.Scene3D.haze)
+        arView.environment.background = .color(UIColor(TimberlineTheme.Scene3D.haze))
         arView.cameraMode = .nonAR
         arView.automaticallyConfigureSession = false
 
@@ -42,11 +43,13 @@ struct ForestSceneView: UIViewRepresentable {
         return arView
     }
 
+    @MainActor
     func updateUIView(_ uiView: ARView, context: Context) {
         context.coordinator.update(game: game)
         hudBridge.update(game: game, arView: uiView)
     }
 
+    @MainActor
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
@@ -59,6 +62,7 @@ struct ForestSceneView: UIViewRepresentable {
         var groundTiles: [ChunkCoord: ModelEntity] = [:]
         var lastChopStrikeID: UUID?
 
+        @MainActor
         func update(game: GameState) {
             guard let anchor else { return }
 
@@ -126,7 +130,7 @@ struct ForestSceneView: UIViewRepresentable {
                     }
                 }
 
-                let entity = makeTreeEntity(species: tree.species, isFelled: isFelled)
+                let entity = Self.makeTreeEntity(species: tree.species, isFelled: isFelled)
                 entity.position = SIMD3<Float>(
                     Float(tree.worldPosition.x),
                     0.0,
@@ -170,6 +174,16 @@ struct ForestSceneView: UIViewRepresentable {
     }
 
     private func makePlayerEntity() -> Entity {
+        // Try loading the USDZ from the package resources (Character/Skiller.usdz)
+        if let url = Bundle.module.url(forResource: "Skiller", withExtension: "usdz", subdirectory: "Character"),
+           let assetEntity = try? Entity.loadModel(contentsOf: url) {
+            let entity = assetEntity
+            entity.scale = SIMD3<Float>(repeating: 0.08)
+            entity.position = SIMD3<Float>(0, 0, 0)
+            return entity
+        }
+
+        // Fallback to legacy named lookup
         if let assetEntity = try? Entity.loadModel(named: "Skiller") {
             let entity = assetEntity
             entity.scale = SIMD3<Float>(repeating: 0.08)
@@ -178,7 +192,7 @@ struct ForestSceneView: UIViewRepresentable {
         }
 
         let material = SimpleMaterial(
-            color: UIColor(TimberlineTheme.Scene3D.wood),
+            color: UIColor(TimberlineTheme.Scene3D.trunk),
             roughness: 0.7,
             isMetallic: false
         )
@@ -188,7 +202,8 @@ struct ForestSceneView: UIViewRepresentable {
         return entity
     }
 
-    private func makeTreeEntity(species: TreeSpecies, isFelled: Bool) -> Entity {
+    @MainActor
+    private static func makeTreeEntity(species: TreeSpecies, isFelled: Bool) -> Entity {
         let assetName: String
         if isFelled {
             switch species {
@@ -222,6 +237,18 @@ struct ForestSceneView: UIViewRepresentable {
             }
         }
 
+        // Determine subdirectory for tree vs stump and try package resource URL
+        let subdir = isFelled ? "Environment/Stumps" : "Environment/Trees"
+        if let url = Bundle.module.url(forResource: assetName, withExtension: "usdz", subdirectory: subdir),
+           let assetEntity = try? Entity.loadModel(contentsOf: url) {
+            let entity = assetEntity
+            entity.scale = SIMD3<Float>(repeating: 0.35)
+            entity.position = SIMD3<Float>(0, 0, 0)
+            entity.name = isFelled ? "stump" : "tree"
+            return entity
+        }
+
+        // Fallback to legacy named lookup
         if let assetEntity = try? Entity.loadModel(named: assetName) {
             let entity = assetEntity
             entity.scale = SIMD3<Float>(repeating: 0.35)

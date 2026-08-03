@@ -78,6 +78,13 @@ final class SkillerAnimationController {
     }
 
     private static func loadAnimation(named assetName: String) -> AnimationResource? {
+        // Try Package resource subdirectory first (Character/<asset>.usdz)
+        if let url = Bundle.module.url(forResource: assetName, withExtension: "usdz", subdirectory: "Character"),
+           let entity = try? Entity.loadModel(contentsOf: url) {
+            return entity.availableAnimations.first
+        }
+
+        // Fallback: legacy name-based loader that searches standard bundle paths
         guard let entity = try? Entity.loadModel(named: assetName) else { return nil }
         return entity.availableAnimations.first
     }
