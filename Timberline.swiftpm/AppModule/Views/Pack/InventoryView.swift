@@ -18,7 +18,8 @@ struct InventoryView: View {
             VStack(spacing: 14) {
                 LazyVGrid(columns: columns, spacing: 8) {
                     ForEach(0..<GameData.inventorySlots, id: \.self) { index in
-                        slotView(game.inventory[index])
+                        let contents = index < game.inventory.count ? game.inventory[index] : nil
+                        slotView(contents)
                     }
                 }
                 .parchmentCard()

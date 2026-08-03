@@ -30,8 +30,10 @@ struct LevelGateToast: View {
             }
             Task {
                 try? await Task.sleep(nanoseconds: 1_800_000_000)
-                withAnimation(.easeOut(duration: 0.4)) {
-                    visible = false
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        visible = false
+                    }
                 }
             }
         }

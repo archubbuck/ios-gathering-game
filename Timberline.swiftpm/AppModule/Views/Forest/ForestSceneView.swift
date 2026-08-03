@@ -26,20 +26,13 @@ struct ForestSceneView: UIViewRepresentable {
 
         let animationController = SkillerAnimationController(rootEntity: player)
 
-        let cameraAnchor = AnchorEntity(world: SIMD3<Float>(0, 8, 10))
-        let camera = PerspectiveCamera()
-        camera.transform.translation = SIMD3<Float>(0, 8, 10)
-        camera.transform.rotation = simd_quatf(angle: -.pi / 4, axis: SIMD3<Float>(1, 0, 0))
-        cameraAnchor.addChild(camera)
-
+        context.coordinator.arView = arView
         context.coordinator.anchor = anchor
         context.coordinator.playerEntity = player
         context.coordinator.groundEntity = ground
-        context.coordinator.cameraAnchor = cameraAnchor
         context.coordinator.animationController = animationController
 
         arView.scene.anchors.append(anchor)
-        arView.scene.anchors.append(cameraAnchor)
         return arView
     }
 
@@ -53,8 +46,8 @@ struct ForestSceneView: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
+        weak var arView: ARView?
         var anchor: AnchorEntity?
-        var cameraAnchor: AnchorEntity?
         var playerEntity: Entity?
         var groundEntity: ModelEntity?
         var animationController: SkillerAnimationController?
@@ -99,18 +92,40 @@ struct ForestSceneView: UIViewRepresentable {
                 animationController?.setMovement(isMoving: false, isRunning: false)
             }
 
-            if let cameraAnchor {
-                cameraAnchor.position = SIMD3<Float>(
+            if let arView {
+                let target = SIMD3<Float>(
                     Float(game.player.position.x),
-                    8,
-                    Float(game.player.position.y) + 10
+                    0,
+                    Float(game.player.position.y)
+                )
+                let cameraPosition = SIMD3<Float>(target.x, 8, target.z + 10)
+                let cameraRotation = simd_quatf(angle: -.pi / 4, axis: SIMD3<Float>(1, 0, 0))
+                arView.cameraTransform = Transform(
+                    scale: SIMD3<Float>(repeating: 1),
+                    rotation: cameraRotation,
+                    translation: cameraPosition
                 )
             }
 
-            let visibleTrees = game.worldTrees
+            let renderRadius = GameData.treeRenderRadius
+            let keepRadius = renderRadius + GameData.treeRenderHysteresis
+            let playerPosition = game.player.position
+            let visibleTrees = game.worldTrees.filter { tree in
+                let dx = tree.worldPosition.x - playerPosition.x
+                let dy = tree.worldPosition.y - playerPosition.y
+                let distance = hypot(dx, dy)
+
+                // Existing nodes are kept slightly longer to avoid
+                // rapid spawn/despawn churn at the radius boundary.
+                if treeEntities[tree.key] != nil {
+                    return distance <= keepRadius
+                }
+                return distance <= renderRadius
+            }
             var seenKeys = Set<String>()
 
-            for tree in visibleTrees {
+            let maxRenderedTrees = 220
+            for tree in visibleTrees.prefix(maxRenderedTrees) {
                 seenKeys.insert(tree.key)
 
                 let isFelled = tree.logsRemaining <= 0 || tree.isDepleted
@@ -240,8 +255,7 @@ struct ForestSceneView: UIViewRepresentable {
 
         // Determine subdirectory for tree vs stump and try package resource URL
         let subdir = isFelled ? "Environment/Stumps" : "Environment/Trees"
-        if let url = Bundle.module.url(forResource: assetName, withExtension: "usdz", subdirectory: subdir),
-           let assetEntity = try? Entity.loadModel(contentsOf: url) {
+        if let assetEntity = loadCachedModel(named: assetName, subdirectory: subdir) {
             let entity = assetEntity
             entity.scale = SIMD3<Float>(repeating: 0.35)
             entity.position = SIMD3<Float>(0, 0, 0)
@@ -264,5 +278,30 @@ struct ForestSceneView: UIViewRepresentable {
         entity.position = SIMD3<Float>(0, 1.1, 0)
         entity.name = isFelled ? "stump" : "tree"
         return entity
+    }
+
+    @MainActor
+    private static var modelPrototypeCache: [String: Entity] = [:]
+
+    @MainActor
+    private static func loadCachedModel(named assetName: String, subdirectory: String) -> Entity? {
+        let cacheKey = "\(subdirectory)/\(assetName)"
+        if let prototype = modelPrototypeCache[cacheKey] {
+            return prototype.clone(recursive: true)
+        }
+
+        let loaded: Entity?
+        if let url = Bundle.module.url(forResource: assetName, withExtension: "usdz", subdirectory: subdirectory),
+           let fromURL = try? Entity.loadModel(contentsOf: url) {
+            loaded = fromURL
+        } else if let fromNamed = try? Entity.loadModel(named: assetName) {
+            loaded = fromNamed
+        } else {
+            loaded = nil
+        }
+
+        guard let loaded else { return nil }
+        modelPrototypeCache[cacheKey] = loaded
+        return loaded.clone(recursive: true)
     }
 }

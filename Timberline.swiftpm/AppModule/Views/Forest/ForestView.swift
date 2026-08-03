@@ -113,9 +113,11 @@ struct ForestView: View {
             }
             Task {
                 try? await Task.sleep(nanoseconds: 2_200_000_000)
-                withAnimation(.easeOut(duration: 0.5)) {
-                    if levelUpBanner == newLevel {
-                        levelUpBanner = nil
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        if levelUpBanner == newLevel {
+                            levelUpBanner = nil
+                        }
                     }
                 }
             }
