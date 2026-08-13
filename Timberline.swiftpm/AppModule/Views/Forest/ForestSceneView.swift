@@ -15,6 +15,7 @@ struct ForestSceneView: UIViewRepresentable {
         static let stumpHeight: Float = 18
         static let cameraBaseHeight: Float = 160
         static let cameraBaseDistance: Float = 220
+        static let characterModelCorrectionRadians: Float = -.pi / 2
     }
 
     @MainActor
@@ -77,10 +78,15 @@ struct ForestSceneView: UIViewRepresentable {
                     0.0,
                     Float(game.player.position.y)
                 )
-                playerEntity.transform.rotation = simd_quatf(
+                let facingRotation = simd_quatf(
                     angle: Float(game.player.facingAngle),
                     axis: SIMD3<Float>(0, 1, 0)
                 )
+                let modelCorrection = simd_quatf(
+                    angle: VisualScale.characterModelCorrectionRadians,
+                    axis: SIMD3<Float>(1, 0, 0)
+                )
+                playerEntity.transform.rotation = facingRotation * modelCorrection
             }
 
             if let chopStrike = game.lastChopStrike, chopStrike.id != lastChopStrikeID {
@@ -213,6 +219,10 @@ struct ForestSceneView: UIViewRepresentable {
             if let url = Bundle.module.url(forResource: candidate, withExtension: "usdz", subdirectory: "Character"),
                let assetEntity = try? Entity.loadModel(contentsOf: url) {
                 let entity = assetEntity
+                entity.transform.rotation = simd_quatf(
+                    angle: VisualScale.characterModelCorrectionRadians,
+                    axis: SIMD3<Float>(1, 0, 0)
+                )
                 Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
                 entity.position = SIMD3<Float>(0, 0, 0)
                 return entity
@@ -220,6 +230,10 @@ struct ForestSceneView: UIViewRepresentable {
 
             if let assetEntity = try? Entity.loadModel(named: candidate) {
                 let entity = assetEntity
+                entity.transform.rotation = simd_quatf(
+                    angle: VisualScale.characterModelCorrectionRadians,
+                    axis: SIMD3<Float>(1, 0, 0)
+                )
                 Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
                 entity.position = SIMD3<Float>(0, 0, 0)
                 return entity
