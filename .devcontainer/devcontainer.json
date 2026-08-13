@@ -9,7 +9,7 @@
       "username": "vscode"
     }
   },
-    "postCreateCommand": "bash -lc 'sudo apt-get update && sudo apt-get install -y curl git clang libcurl4-openssl-dev libxml2-dev tzdata && cd /tmp && curl -fL -o swift.tar.gz https://download.swift.org/swift-6.0.3-release/ubuntu2404/swift-6.0.3-RELEASE/swift-6.0.3-RELEASE-ubuntu24.04.tar.gz && mkdir -p /tmp/swift && tar -xzf swift.tar.gz -C /tmp/swift && sudo mkdir -p /opt/swift && sudo rm -rf /opt/swift/swift-6.0.3-RELEASE-ubuntu24.04 && sudo mv /tmp/swift/swift-6.0.3-RELEASE-ubuntu24.04 /opt/swift/ && echo \"export PATH=/opt/swift/swift-6.0.3-RELEASE-ubuntu24.04/usr/bin:\\$PATH\" >> ~/.bashrc && echo \"export SWIFT_HOME=/opt/swift/swift-6.0.3-RELEASE-ubuntu24.04/usr\" >> ~/.bashrc && source ~/.bashrc && swift --version'",
+      "postCreateCommand": "bash -lc 'sudo apt-get update && sudo apt-get install -y curl git git-lfs clang libcurl4-openssl-dev libxml2-dev tzdata && cd /tmp && curl -fL -o swift.tar.gz https://download.swift.org/swift-6.0.3-release/ubuntu2404/swift-6.0.3-RELEASE/swift-6.0.3-RELEASE-ubuntu24.04.tar.gz && mkdir -p /tmp/swift && tar -xzf swift.tar.gz -C /tmp/swift && sudo mkdir -p /opt/swift && sudo rm -rf /opt/swift/swift-6.0.3-RELEASE-ubuntu24.04 && sudo mv /tmp/swift/swift-6.0.3-RELEASE-ubuntu24.04 /opt/swift/ && echo \"export PATH=/opt/swift/swift-6.0.3-RELEASE-ubuntu24.04/usr/bin:\\$PATH\" >> ~/.bashrc && echo \"export SWIFT_HOME=/opt/swift/swift-6.0.3-RELEASE-ubuntu24.04/usr\" >> ~/.bashrc && source ~/.bashrc && swift --version'",
   "customizations": {
     "vscode": {
       "extensions": [
