@@ -15,7 +15,6 @@ struct ForestSceneView: UIViewRepresentable {
         static let stumpHeight: Float = 18
         static let cameraBaseHeight: Float = 160
         static let cameraBaseDistance: Float = 220
-        static let cameraPitchRadians: Float = -.pi / 4
     }
 
     @MainActor
@@ -107,16 +106,17 @@ struct ForestSceneView: UIViewRepresentable {
 
             if let cameraEntity {
                 let target = SIMD3<Float>(
-                    Float(game.player.position.x),
+                    Float(game.camera.center.x),
                     0,
-                    Float(game.player.position.y)
+                    Float(game.camera.center.y)
                 )
                 let zoomScale = max(Float(game.camera.zoomScale), 0.001)
                 let cameraHeight = VisualScale.cameraBaseHeight / zoomScale
                 let cameraDistance = VisualScale.cameraBaseDistance / zoomScale
                 let cameraPosition = SIMD3<Float>(target.x, cameraHeight, target.z + cameraDistance)
+                let cameraPitchRadians = -atan2(cameraHeight, cameraDistance)
                 let cameraRotation = simd_quatf(
-                    angle: VisualScale.cameraPitchRadians,
+                    angle: cameraPitchRadians,
                     axis: SIMD3<Float>(1, 0, 0)
                 )
                 cameraEntity.transform = Transform(
