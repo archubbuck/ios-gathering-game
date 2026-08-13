@@ -26,9 +26,9 @@ final class SkillerAnimationController {
     init(rootEntity: Entity) {
         self.rootEntity = rootEntity
         self.idleResource = Self.loadAnimation(named: "Skiller_Idle")
-        self.walkResource = Self.loadAnimation(named: "Skiller_Walk")
-        self.runResource = Self.loadAnimation(named: "Skiller_Run")
-        self.chopResource = Self.loadAnimation(named: "Skiller_Chop")
+        self.walkResource = Self.loadAnimation(named: "Skiller_Walking")
+        self.runResource = Self.loadAnimation(named: "Skiller_Running")
+        self.chopResource = Self.loadAnimation(named: "Skiller_Chopping")
 
         applyState(.idle)
     }
@@ -78,14 +78,32 @@ final class SkillerAnimationController {
     }
 
     private static func loadAnimation(named assetName: String) -> AnimationResource? {
-        // Try Package resource subdirectory first (Character/<asset>.usdz)
-        if let url = Bundle.module.url(forResource: assetName, withExtension: "usdz", subdirectory: "Character"),
-           let entity = try? Entity.loadModel(contentsOf: url) {
-            return entity.availableAnimations.first
+        for candidate in assetCandidates(for: assetName) {
+            if let url = Bundle.module.url(forResource: candidate, withExtension: "usdz", subdirectory: "Character"),
+               let entity = try? Entity.loadModel(contentsOf: url) {
+                return entity.availableAnimations.first
+            }
+
+            if let entity = try? Entity.loadModel(named: candidate) {
+                return entity.availableAnimations.first
+            }
         }
 
-        // Fallback: legacy name-based loader that searches standard bundle paths
-        guard let entity = try? Entity.loadModel(named: assetName) else { return nil }
-        return entity.availableAnimations.first
+        return nil
+    }
+
+    private static func assetCandidates(for assetName: String) -> [String] {
+        switch assetName {
+        case "Skiller_Idle":
+            return ["Skiller_Idle"]
+        case "Skiller_Walking":
+            return ["Skiller_Walking", "Skiller_Walk"]
+        case "Skiller_Running":
+            return ["Skiller_Running", "Skiller_Run"]
+        case "Skiller_Chopping":
+            return ["Skiller_Chopping", "Skiller_Chop"]
+        default:
+            return [assetName]
+        }
     }
 }

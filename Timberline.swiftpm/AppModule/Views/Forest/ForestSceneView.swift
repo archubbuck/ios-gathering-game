@@ -207,21 +207,23 @@ struct ForestSceneView: UIViewRepresentable {
     }
 
     private func makePlayerEntity() -> Entity {
-        // Try loading the USDZ from the package resources (Character/Skiller.usdz)
-        if let url = Bundle.module.url(forResource: "Skiller", withExtension: "usdz", subdirectory: "Character"),
-           let assetEntity = try? Entity.loadModel(contentsOf: url) {
-            let entity = assetEntity
-            Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
-            entity.position = SIMD3<Float>(0, 0, 0)
-            return entity
-        }
+        let candidates = ["Skiller", "Skiller_Idle", "Skiller_Walking", "Skiller_Running", "Skiller_Chopping"]
 
-        // Fallback to legacy named lookup
-        if let assetEntity = try? Entity.loadModel(named: "Skiller") {
-            let entity = assetEntity
-            Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
-            entity.position = SIMD3<Float>(0, 0, 0)
-            return entity
+        for candidate in candidates {
+            if let url = Bundle.module.url(forResource: candidate, withExtension: "usdz", subdirectory: "Character"),
+               let assetEntity = try? Entity.loadModel(contentsOf: url) {
+                let entity = assetEntity
+                Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
+                entity.position = SIMD3<Float>(0, 0, 0)
+                return entity
+            }
+
+            if let assetEntity = try? Entity.loadModel(named: candidate) {
+                let entity = assetEntity
+                Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
+                entity.position = SIMD3<Float>(0, 0, 0)
+                return entity
+            }
         }
 
         let material = SimpleMaterial(
