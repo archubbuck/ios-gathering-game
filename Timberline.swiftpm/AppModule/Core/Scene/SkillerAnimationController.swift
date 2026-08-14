@@ -35,6 +35,7 @@ final class SkillerAnimationController {
     }
 
     func setMovement(isMoving: Bool, isRunning: Bool) {
+        ensurePlaybackCompletionObservation()
         let nextState: State = isMoving ? (isRunning ? .running : .walking) : .idle
         guard nextState != currentState else { return }
         previousMovementState = nextState
@@ -77,23 +78,23 @@ final class SkillerAnimationController {
                 rootEntity.playAnimation(resource, transitionDuration: 0.12)
             }
         }
+    }
 
-        private func ensurePlaybackCompletionObservation() {
-            guard playbackCompletionSubscription == nil,
-                  let scene = rootEntity.scene else { return }
+    private func ensurePlaybackCompletionObservation() {
+        guard playbackCompletionSubscription == nil,
+              let scene = rootEntity.scene else { return }
 
-            playbackCompletionSubscription = scene.subscribe(
-                to: AnimationEvents.PlaybackCompleted.self,
-                on: rootEntity
-            ) { [weak self] _ in
-                guard let self else { return }
+        playbackCompletionSubscription = scene.subscribe(
+            to: AnimationEvents.PlaybackCompleted.self,
+            on: rootEntity
+        ) { [weak self] _ in
+            guard let self else { return }
 
-                switch self.currentState {
-                case .idle, .walking, .running:
-                    self.applyState(self.currentState)
-                case .chopping:
-                    break
-                }
+            switch self.currentState {
+            case .idle, .walking, .running:
+                self.applyState(self.currentState)
+            case .chopping:
+                break
             }
         }
     }
