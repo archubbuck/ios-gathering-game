@@ -63,11 +63,11 @@ jobs:
           security default-keychain -s "${KEYCHAIN}"
 
           # Extract the SHA-1 hash of the imported identity
-          IDENTITY_HASH=$(security find-identity -v -p codesigning "${KEYCHAIN}" | \
-            grep "Apple Distribution" | head -1 | awk '{print $2}')
-          if [ -z "${IDENTITY_HASH}" ]; then
-            echo "::error::No Apple Distribution identity found in keychain"
-            security find-identity -v -p codesigning "${KEYCHAIN}"
+          IDENTITIES=$(security find-identity -v -p codesigning "${KEYCHAIN}")
+          IDENTITY_HASH=$(printf '%s\n' "${IDENTITIES}" | awk '/^[[:space:]]*[0-9]+\)/ && $2 ~ /^[A-Fa-f0-9]{40}$/ {print $2; exit}')
+          if ! [[ "${IDENTITY_HASH}" =~ ^[A-Fa-f0-9]{40}$ ]]; then
+            echo "::error::No valid code signing identity found in keychain"
+            printf '%s\n' "${IDENTITIES}"
             exit 1
           fi
           echo "identity=${IDENTITY_HASH}" >> "${GITHUB_OUTPUT}"
