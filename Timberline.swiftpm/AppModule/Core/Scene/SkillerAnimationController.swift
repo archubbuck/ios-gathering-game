@@ -1,3 +1,4 @@
+import Combine
 import RealityKit
 import SwiftUI
 
@@ -22,7 +23,7 @@ final class SkillerAnimationController {
     private var currentState: State = .idle
     private var previousMovementState: State = .idle
     private var activeChopTask: Task<Void, Never>?
-    private var playbackCompletionSubscription: EventSubscription?
+    private var playbackCompletionSubscription: (any Cancellable)?
 
     init(rootEntity: Entity) {
         self.rootEntity = rootEntity
