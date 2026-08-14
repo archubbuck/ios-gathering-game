@@ -22,6 +22,7 @@ final class SkillerAnimationController {
     private var currentState: State = .idle
     private var previousMovementState: State = .idle
     private var activeChopTask: Task<Void, Never>?
+    private var playbackCompletionSubscription: EventSubscription?
 
     init(rootEntity: Entity) {
         self.rootEntity = rootEntity
@@ -34,6 +35,7 @@ final class SkillerAnimationController {
     }
 
     func setMovement(isMoving: Bool, isRunning: Bool) {
+        ensurePlaybackCompletionObservation()
         let nextState: State = isMoving ? (isRunning ? .running : .walking) : .idle
         guard nextState != currentState else { return }
         previousMovementState = nextState
@@ -56,6 +58,7 @@ final class SkillerAnimationController {
 
     private func applyState(_ state: State) {
         currentState = state
+        ensurePlaybackCompletionObservation()
 
         switch state {
         case .idle:
@@ -73,6 +76,25 @@ final class SkillerAnimationController {
         case .chopping:
             if let resource = chopResource {
                 rootEntity.playAnimation(resource, transitionDuration: 0.12)
+            }
+        }
+    }
+
+    private func ensurePlaybackCompletionObservation() {
+        guard playbackCompletionSubscription == nil,
+              let scene = rootEntity.scene else { return }
+
+        playbackCompletionSubscription = scene.subscribe(
+            to: AnimationEvents.PlaybackCompleted.self,
+            on: rootEntity
+        ) { [weak self] _ in
+            guard let self else { return }
+
+            switch self.currentState {
+            case .idle, .walking, .running:
+                self.applyState(self.currentState)
+            case .chopping:
+                break
             }
         }
     }
