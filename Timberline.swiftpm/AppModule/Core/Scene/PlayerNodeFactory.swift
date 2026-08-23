@@ -1,7 +1,9 @@
-import SceneKit
-import SwiftUI
+import Foundation
 
-/// Builds the player's SceneKit node hierarchy once — a chibi woodcutter
+// PlayerNodeFactory has been retired as part of the 2D conversion.
+// The player is now rendered as an SKNode hierarchy in
+// ForestSceneView.Coordinator.makePlayerNode().
+enum PlayerNodeFactory {} — a chibi woodcutter
 /// (big head, straw hat, vest over shirt, blue shorts, orange shoes) with
 /// hip leg pivots for the walk cycle and elbow-articulated arms holding the
 /// equipped axe with a two-handed grip — and provides the full-body

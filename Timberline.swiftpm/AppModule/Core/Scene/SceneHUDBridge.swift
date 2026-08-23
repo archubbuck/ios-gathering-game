@@ -1,11 +1,14 @@
-import ARKit
 import CoreGraphics
-import RealityKit
-import SceneKit
+import Foundation
 
-/// Publishes the single on-screen projection of whichever tree currently
+/// Publishes the single on-screen position of whichever tree currently
 /// matters to the HUD — the tree being chopped, or the one the player is
 /// dwelling near just before chopping starts.
+///
+/// In the 2D scene there is no 3D projection: world coordinates are
+/// converted to screen coordinates by a simple affine transform derived
+/// from the camera centre, zoom level, and the viewport size that
+/// `ForestSceneView` reports on each update.
 @MainActor
 final class SceneHUDBridge: ObservableObject {
     enum Target: Equatable {
@@ -16,24 +19,21 @@ final class SceneHUDBridge: ObservableObject {
     @Published private(set) var screenPoint: CGPoint?
     @Published private(set) var target: Target?
 
-    /// World-space height above a tree's base the ring should hover at.
-    /// Fixed rather than per-species since it only needs to clear the
-    /// canopy, not hug it exactly.
-    private static let ringHeight: CGFloat = 90
+    /// The most recent viewport size, stored so `screenPoint` can be
+    /// recomputed if it was set before the view had a non-zero frame.
+    private var lastViewSize: CGSize = .zero
 
-    /// True once an `update(game:scnView:)` call has computed values that
-    /// differ from what's published and scheduled the actual publish for
-    /// the next run-loop turn. Coalesces bursts of `updateUIView` calls
-    /// (which can fire faster than once per display refresh) into a
-    /// single deferred publish, and guarantees the publish never happens
-    /// synchronously inside a SwiftUI view-update pass — doing so there
-    /// would re-invalidate this bridge's observers mid-update.
+    /// Coalesces bursts of `update` calls into a single deferred publish
+    /// so the bridge never fires a `@Published` change synchronously
+    /// inside a SwiftUI view-update pass.
     private var publishScheduled = false
     private var pendingScreenPoint: CGPoint?
     private var pendingTarget: Target?
 
-    func update(game: GameState, scnView: SCNView? = nil, arView: ARView? = nil) {
-        let (newPoint, newTarget) = computeState(game: game, scnView: scnView, arView: arView)
+    /// Called every frame by `ForestSceneView.updateUIView`.
+    func update(game: GameState, viewSize: CGSize) {
+        if viewSize != .zero { lastViewSize = viewSize }
+        let (newPoint, newTarget) = computeState(game: game, viewSize: lastViewSize)
 
         guard newPoint != screenPoint || newTarget != target else { return }
 
@@ -50,39 +50,45 @@ final class SceneHUDBridge: ObservableObject {
         }
     }
 
-    private func computeState(game: GameState, scnView: SCNView?, arView: ARView?) -> (CGPoint?, Target?) {
+    // MARK: - Private helpers
+
+    private func computeState(game: GameState, viewSize: CGSize) -> (CGPoint?, Target?) {
         if let key = game.activeChopTreeKey,
            let tree = game.worldTrees.first(where: { $0.key == key })
         {
-            let point = project(tree.worldPosition, in: scnView, arView: arView)
+            let point = worldToScreen(tree.worldPosition, game: game, viewSize: viewSize)
             return (point, .chopping(progress: depletionProgress(for: tree)))
         }
 
         if let key = game.player.dwellTargetKey,
            let tree = game.worldTrees.first(where: { $0.key == key })
         {
-            let point = project(tree.worldPosition, in: scnView, arView: arView)
+            let point = worldToScreen(tree.worldPosition, game: game, viewSize: viewSize)
             return (point, .dwelling(progress: dwellProgress(for: game)))
         }
 
         return (nil, nil)
     }
 
-    private func project(_ worldPosition: CGPoint, in scnView: SCNView?, arView: ARView?) -> CGPoint? {
-        if let arView {
-            let projected = arView.project(
-                SIMD3<Float>(Float(worldPosition.x), Float(Self.ringHeight), Float(worldPosition.y))
-            )
-            guard let projected else { return nil }
-            return CGPoint(x: CGFloat(projected.x), y: CGFloat(projected.y))
-        }
+    /// Converts a 2D world-space position to a screen-space point.
+    ///
+    /// The formula mirrors `ForestSceneView`'s camera setup:
+    ///  - The viewport shows `baseVisibleWorldHeight / zoomScale` world
+    ///    units vertically at any given zoom level.
+    ///  - The camera is centred on `game.camera.center`.
+    private func worldToScreen(_ worldPos: CGPoint, game: GameState, viewSize: CGSize) -> CGPoint? {
+        guard viewSize.width > 0, viewSize.height > 0 else { return nil }
 
-        guard let scnView else { return nil }
-        let worldPoint = SceneKitConversions.vector(worldPosition, height: Self.ringHeight)
-        let projected = scnView.projectPoint(worldPoint)
+        let zoom = game.camera.zoomScale
+        // Pixels per world unit at the current zoom level.
+        let ppu = viewSize.height / (ForestSceneView.baseVisibleWorldHeight / zoom)
+
+        let dx = worldPos.x - game.camera.center.x
+        let dy = worldPos.y - game.camera.center.y
+
         return CGPoint(
-            x: SceneKitConversions.cgFloat(projected.x),
-            y: SceneKitConversions.cgFloat(projected.y)
+            x: viewSize.width  / 2 + dx * ppu,
+            y: viewSize.height / 2 + dy * ppu
         )
     }
 
