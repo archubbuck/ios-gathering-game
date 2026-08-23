@@ -49,6 +49,7 @@ struct ForestSceneView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
+    @MainActor
     final class Coordinator {
         var scene: SKScene?
         var cameraNode: SKCameraNode?
