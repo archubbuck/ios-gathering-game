@@ -58,6 +58,7 @@ struct ForestSceneView: UIViewRepresentable {
         var groundTiles: [ChunkCoord: SKSpriteNode] = [:]
         var lastChopStrikeID: UUID?
         var animationController = SkillerAnimationController()
+        // Break equal-foot-position ties in favour of the player.
         private let playerDepthBias: CGFloat = 0.001
 
         func update(game: GameState) {
