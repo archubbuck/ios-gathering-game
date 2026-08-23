@@ -183,18 +183,33 @@ struct ForestSceneView: UIViewRepresentable {
             let root = SKNode()
             root.name = "player"
 
-            // Legs
+            // Bare calves and chunky shoes, matching the chibi woodcutter model.
             for (xOffset, legName) in [(-5, "legL"), (5, "legR")] as [(Int, String)] {
                 let leg = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.SceneArt.shorts),
-                    size: CGSize(width: 7, height: 14)
+                    color: UIColor(TimberlineTheme.SceneArt.skin),
+                    size: CGSize(width: 7, height: 12)
                 )
                 leg.name = legName
-                leg.position = CGPoint(x: xOffset, y: 8)
+                leg.position = CGPoint(x: xOffset, y: 10)
                 root.addChild(leg)
+
+                let shoe = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.SceneArt.shoes),
+                    size: CGSize(width: 9, height: 5)
+                )
+                shoe.position = CGPoint(x: xOffset, y: 2)
+                root.addChild(shoe)
             }
 
-            // Torso
+            // Blue shorts
+            let shorts = SKSpriteNode(
+                color: UIColor(TimberlineTheme.SceneArt.shorts),
+                size: CGSize(width: 17, height: 8)
+            )
+            shorts.position = CGPoint(x: 0, y: 19)
+            root.addChild(shorts)
+
+            // Vest over the light shirt
             let body = SKSpriteNode(
                 color: UIColor(TimberlineTheme.SceneArt.vest),
                 size: CGSize(width: 18, height: 20)
@@ -202,6 +217,47 @@ struct ForestSceneView: UIViewRepresentable {
             body.name = "body"
             body.position = CGPoint(x: 0, y: 24)
             root.addChild(body)
+
+            let collar = SKSpriteNode(
+                color: UIColor(TimberlineTheme.SceneArt.shirt),
+                size: CGSize(width: 19, height: 3)
+            )
+            collar.position = CGPoint(x: 0, y: 36)
+            root.addChild(collar)
+
+            // Shirt sleeves and exposed forearms.
+            for xOffset in [-11, 11] {
+                let sleeve = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.SceneArt.shirt),
+                    size: CGSize(width: 6, height: 10)
+                )
+                sleeve.position = CGPoint(x: xOffset, y: 32)
+                root.addChild(sleeve)
+
+                let forearm = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.SceneArt.skin),
+                    size: CGSize(width: 5, height: 9)
+                )
+                forearm.position = CGPoint(x: xOffset, y: 24)
+                root.addChild(forearm)
+            }
+
+            // Axe held at the right side.
+            let axeHandle = SKSpriteNode(
+                color: UIColor(TimberlineTheme.barkLight),
+                size: CGSize(width: 3, height: 20)
+            )
+            axeHandle.zRotation = -.25
+            axeHandle.position = CGPoint(x: 14, y: 20)
+            root.addChild(axeHandle)
+
+            let axeHead = SKSpriteNode(
+                color: UIColor(AxeArt.metalColors(for: .bronze).light),
+                size: CGSize(width: 10, height: 7)
+            )
+            axeHead.zRotation = -.25
+            axeHead.position = CGPoint(x: 16, y: 29)
+            root.addChild(axeHead)
 
             // Head
             let head = SKShapeNode(circleOfRadius: 9.5)
@@ -218,6 +274,13 @@ struct ForestSceneView: UIViewRepresentable {
             )
             brim.position = CGPoint(x: 0, y: 52)
             root.addChild(brim)
+
+            let band = SKSpriteNode(
+                color: UIColor(TimberlineTheme.SceneArt.hatBand),
+                size: CGSize(width: 15, height: 2)
+            )
+            band.position = CGPoint(x: 0, y: 56)
+            root.addChild(band)
 
             // Straw hat — crown
             let crown = SKShapeNode(circleOfRadius: 7)
