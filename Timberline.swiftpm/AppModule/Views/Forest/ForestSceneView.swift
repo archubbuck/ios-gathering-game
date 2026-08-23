@@ -249,13 +249,15 @@ struct ForestSceneView: UIViewRepresentable {
                 size: CGSize(width: 3, height: 20)
             )
             // Hold the axe at the same slight diagonal as the 3D model.
-            let axeTiltRadians = -14.3 * CGFloat.pi / 180
+            let axeTiltDegrees: CGFloat = -14.3
+            let axeTiltRadians = axeTiltDegrees * CGFloat.pi / 180
             axeHandle.zRotation = axeTiltRadians
             axeHandle.position = CGPoint(x: 14, y: 20)
             root.addChild(axeHandle)
 
+            let axeMetal = AxeArt.metalColors(for: .bronze)
             let axeHead = SKSpriteNode(
-                color: UIColor(AxeArt.metalColors(for: .bronze).light),
+                color: UIColor(axeMetal.light),
                 size: CGSize(width: 10, height: 7)
             )
             axeHead.zRotation = axeTiltRadians
@@ -263,7 +265,7 @@ struct ForestSceneView: UIViewRepresentable {
             root.addChild(axeHead)
 
             let axeBladeEdge = SKSpriteNode(
-                color: UIColor(AxeArt.metalColors(for: .bronze).dark),
+                color: UIColor(axeMetal.dark),
                 size: CGSize(width: 10, height: 2)
             )
             axeBladeEdge.zRotation = axeTiltRadians
