@@ -1,132 +1,31 @@
-import Combine
-import RealityKit
-import SwiftUI
+import Foundation
 
-/// A lightweight animation controller for the bundled Skiller USDZ assets.
-/// It keeps the public API from the issue notes while falling back gracefully
-/// if any of the animation variants are unavailable in the current build.
-@MainActor
+/// Tracks the player character's 2D animation state. In the 2D renderer
+/// there are no USDZ skeletal animations — this lightweight controller
+/// simply records the current state so `ForestSceneView.Coordinator` can
+/// drive sprite-level feedback (e.g. the chop-shake action).
 final class SkillerAnimationController {
     enum State: Equatable {
         case idle
         case walking
-        case running
         case chopping
     }
 
-    private let rootEntity: Entity
-    private let idleResource: AnimationResource?
-    private let walkResource: AnimationResource?
-    private let runResource: AnimationResource?
-    private let chopResource: AnimationResource?
-
-    private var currentState: State = .idle
-    private var previousMovementState: State = .idle
+    private(set) var currentState: State = .idle
     private var activeChopTask: Task<Void, Never>?
-    private var playbackCompletionSubscription: (any Cancellable)?
 
-    init(rootEntity: Entity) {
-        self.rootEntity = rootEntity
-        self.idleResource = Self.loadAnimation(named: "Skiller_Idle")
-        self.walkResource = Self.loadAnimation(named: "Skiller_Walking")
-        self.runResource = Self.loadAnimation(named: "Skiller_Running")
-        self.chopResource = Self.loadAnimation(named: "Skiller_Chopping")
-
-        applyState(.idle)
-    }
-
-    func setMovement(isMoving: Bool, isRunning: Bool) {
-        ensurePlaybackCompletionObservation()
-        let nextState: State = isMoving ? (isRunning ? .running : .walking) : .idle
-        guard nextState != currentState else { return }
-        previousMovementState = nextState
-        applyState(nextState)
+    func setMovement(isMoving: Bool) {
+        guard currentState != .chopping else { return }
+        currentState = isMoving ? .walking : .idle
     }
 
     func playChop() {
-        guard currentState != .chopping else { return }
         activeChopTask?.cancel()
-        previousMovementState = currentState == .chopping ? previousMovementState : currentState
-        applyState(.chopping)
-
+        currentState = .chopping
         activeChopTask = Task { [weak self] in
-            guard let self else { return }
             try? await Task.sleep(nanoseconds: 900_000_000)
-            guard !Task.isCancelled else { return }
-            self.applyState(self.previousMovementState)
-        }
-    }
-
-    private func applyState(_ state: State) {
-        currentState = state
-        ensurePlaybackCompletionObservation()
-
-        switch state {
-        case .idle:
-            if let resource = idleResource {
-                rootEntity.playAnimation(resource, transitionDuration: 0.2)
-            }
-        case .walking:
-            if let resource = walkResource {
-                rootEntity.playAnimation(resource, transitionDuration: 0.2)
-            }
-        case .running:
-            if let resource = runResource {
-                rootEntity.playAnimation(resource, transitionDuration: 0.2)
-            }
-        case .chopping:
-            if let resource = chopResource {
-                rootEntity.playAnimation(resource, transitionDuration: 0.12)
-            }
-        }
-    }
-
-    private func ensurePlaybackCompletionObservation() {
-        guard playbackCompletionSubscription == nil,
-              let scene = rootEntity.scene else { return }
-
-        playbackCompletionSubscription = scene.subscribe(
-            to: AnimationEvents.PlaybackCompleted.self,
-            on: rootEntity
-        ) { [weak self] _ in
-            guard let self else { return }
-
-            switch self.currentState {
-            case .idle, .walking, .running:
-                self.applyState(self.currentState)
-            case .chopping:
-                break
-            }
-        }
-    }
-
-    private static func loadAnimation(named assetName: String) -> AnimationResource? {
-        for candidate in assetCandidates(for: assetName) {
-            if let url = Bundle.module.url(forResource: candidate, withExtension: "usdz", subdirectory: "Character"),
-               let entity = try? Entity.loadModel(contentsOf: url) {
-                return entity.availableAnimations.first
-            }
-
-            if let entity = try? Entity.loadModel(named: candidate) {
-                return entity.availableAnimations.first
-            }
-        }
-
-        return nil
-    }
-
-    private static func assetCandidates(for assetName: String) -> [String] {
-        switch assetName {
-        case "Skiller_Idle":
-            return ["Skiller_Idle"]
-        case "Skiller_Walking":
-            return ["Skiller_Walking", "Skiller_Walk"]
-        case "Skiller_Running":
-            return ["Skiller_Running", "Skiller_Run"]
-        case "Skiller_Chopping":
-            return ["Skiller_Chopping", "Skiller_Chop"]
-        default:
-            return [assetName]
+            guard !Task.isCancelled, let self else { return }
+            self.currentState = .idle
         }
     }
 }

@@ -207,10 +207,9 @@ struct LevelGateWarning: Identifiable, Equatable {
     let requiredLevel: Int
 }
 
-/// Fired on every real chop-tick attempt (success or miss) so the SceneKit
-/// layer can retrigger the axe-swing animation in lockstep with gameplay,
-/// rather than looping independently of it. `success` gates whether the
-/// swing also spawns impact feedback (wood-chip burst + tree shake).
+/// Fired on every real chop-tick attempt (success or miss) so the 2D
+/// renderer can retrigger the chop-shake animation in lockstep with
+/// gameplay, rather than looping independently of it.
 struct ChopStrikeEvent: Identifiable, Equatable {
     let id = UUID()
     let treeKey: String

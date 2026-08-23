@@ -86,8 +86,8 @@ enum GameData {
     /// Cluster centers per chunk.
     static let clustersPerChunk = 4
 
-    /// Radius (world units) around the player within which trees get an
-    /// actual SceneKit node. Deliberately smaller than the gameplay area
+    /// Radius (world units) around the player within which trees get a
+    /// visible sprite node. Deliberately smaller than the gameplay area
     /// implied by `chunkLoadRadius` — most loaded trees are never on-screen.
     static let treeRenderRadius: CGFloat = 1400
     /// Extra distance beyond `treeRenderRadius` before a tree node is torn

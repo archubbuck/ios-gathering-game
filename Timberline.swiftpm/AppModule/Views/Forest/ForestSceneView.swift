@@ -1,361 +1,357 @@
-import ARKit
-import RealityKit
+import SpriteKit
 import SwiftUI
 import UIKit
 
-/// A lightweight RealityKit viewport for the forest scene. The current pass
-/// swaps the temporary placeholder cubes for the bundled USDZ assets from the
-/// app resources, while keeping the player/camera/world updates intact.
+/// A SpriteKit-backed 2D forest scene. All world objects — ground tiles,
+/// trees, and the player — are drawn as `SKSpriteNode`s whose `zPosition`
+/// is set to their world-space Y coordinate every frame. Because SpriteKit
+/// renders higher `zPosition` values on top, objects that sit lower on the
+/// screen (higher world Y = "closer" to the camera) naturally occlude
+/// objects that are higher up, giving a convincing illusion of depth
+/// without any 3D geometry.
 struct ForestSceneView: UIViewRepresentable {
     @EnvironmentObject private var game: GameState
     @ObservedObject var hudBridge: SceneHUDBridge
 
-    private enum VisualScale {
-        static let playerHeight: Float = 58
-        static let stumpHeight: Float = 18
-        static let cameraBaseHeight: Float = 160
-        static let cameraBaseDistance: Float = 220
-        static let characterModelCorrectionRadians: Float = -.pi / 2
+    /// World units visible vertically at zoom level 1.0. Matches the
+    /// comment in `Camera.swift` ("~350-unit-tall view at zoom 1").
+    static let baseVisibleWorldHeight: CGFloat = 350
+
+    func makeUIView(context: Context) -> SKView {
+        let skView = SKView(frame: .zero)
+        // zPosition on each node controls ordering; sibling order doesn't.
+        skView.ignoresSiblingOrder = true
+        skView.showsFPS = false
+        skView.showsNodeCount = false
+
+        let scene = SKScene()
+        scene.scaleMode = .resizeFill
+        scene.backgroundColor = UIColor(TimberlineTheme.Scene3D.haze)
+        // (0,0) at the scene centre makes camera positioning simple.
+        scene.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+
+        let cam = SKCameraNode()
+        scene.addChild(cam)
+        scene.camera = cam
+
+        context.coordinator.scene = scene
+        context.coordinator.cameraNode = cam
+        skView.presentScene(scene)
+        return skView
     }
 
-    @MainActor
-    func makeUIView(context: Context) -> ARView {
-        let arView = ARView(frame: .zero)
-        arView.environment.background = .color(UIColor(TimberlineTheme.Scene3D.haze))
-        arView.cameraMode = .nonAR
-        arView.automaticallyConfigureSession = false
-
-        let anchor = AnchorEntity(world: .zero)
-        let ground = makeGroundEntity()
-        anchor.addChild(ground)
-
-        let player = makePlayerEntity()
-        anchor.addChild(player)
-
-        let animationController = SkillerAnimationController(rootEntity: player)
-
-        let camera = PerspectiveCamera()
-        anchor.addChild(camera)
-
-        context.coordinator.arView = arView
-        context.coordinator.anchor = anchor
-        context.coordinator.playerEntity = player
-        context.coordinator.groundEntity = ground
-        context.coordinator.animationController = animationController
-        context.coordinator.cameraEntity = camera
-
-        arView.scene.anchors.append(anchor)
-        return arView
-    }
-
-    @MainActor
-    func updateUIView(_ uiView: ARView, context: Context) {
+    func updateUIView(_ uiView: SKView, context: Context) {
         context.coordinator.update(game: game)
-        hudBridge.update(game: game, arView: uiView)
+        hudBridge.update(game: game, viewSize: uiView.bounds.size)
     }
 
-    @MainActor
     func makeCoordinator() -> Coordinator { Coordinator() }
 
+    // MARK: - Coordinator
+
+    @MainActor
     final class Coordinator {
-        weak var arView: ARView?
-        var anchor: AnchorEntity?
-        var playerEntity: Entity?
-        var groundEntity: ModelEntity?
-        var animationController: SkillerAnimationController?
-        var cameraEntity: PerspectiveCamera?
-        var treeEntities: [String: Entity] = [:]
-        var groundTiles: [ChunkCoord: ModelEntity] = [:]
+        var scene: SKScene?
+        var cameraNode: SKCameraNode?
+        var playerNode: SKNode?
+        var treeNodes: [String: SKNode] = [:]
+        var groundTiles: [ChunkCoord: SKSpriteNode] = [:]
         var lastChopStrikeID: UUID?
+        var animationController = SkillerAnimationController()
 
-        @MainActor
         func update(game: GameState) {
-            guard let anchor else { return }
+            guard let scene else { return }
 
-            if let playerEntity {
-                playerEntity.position = SIMD3<Float>(
-                    Float(game.player.position.x),
-                    0.0,
-                    Float(game.player.position.y)
+            // ── Camera ────────────────────────────────────────────────────
+            if let cam = cameraNode {
+                let zoom = game.camera.zoomScale
+                // SKCameraNode scale: smaller = more zoomed in.
+                cam.setScale(1.0 / zoom)
+                // Game Y increases downward; SpriteKit Y increases upward,
+                // so we negate the Y component when placing all nodes.
+                cam.position = CGPoint(
+                    x: game.camera.center.x,
+                    y: -game.camera.center.y
                 )
-                let facingRotation = simd_quatf(
-                    angle: Float(game.player.facingAngle),
-                    axis: SIMD3<Float>(0, 1, 0)
-                )
-                let modelCorrection = simd_quatf(
-                    angle: VisualScale.characterModelCorrectionRadians,
-                    axis: SIMD3<Float>(1, 0, 0)
-                )
-                playerEntity.transform.rotation = facingRotation * modelCorrection
             }
 
-            if let chopStrike = game.lastChopStrike, chopStrike.id != lastChopStrikeID {
-                lastChopStrikeID = chopStrike.id
-                animationController?.playChop()
-                if chopStrike.success, let treeEntity = treeEntities[chopStrike.treeKey] {
-                    treeEntity.position = SIMD3<Float>(
-                        treeEntity.position.x,
-                        0.0,
-                        treeEntity.position.z
-                    )
+            // ── Player ────────────────────────────────────────────────────
+            if playerNode == nil {
+                let node = makePlayerNode()
+                scene.addChild(node)
+                playerNode = node
+            }
+            if let node = playerNode {
+                let p = game.player.position
+                node.position = CGPoint(x: p.x, y: -p.y)
+                // Y-sort: objects lower on screen (higher world Y) render
+                // on top of objects higher up.
+                node.zPosition = CGFloat(p.y)
+
+                // Mirror sprite horizontally when walking left/right.
+                if let body = node.childNode(withName: "body") as? SKSpriteNode {
+                    if game.player.velocity.x > 1 {
+                        body.xScale = abs(body.xScale)
+                    } else if game.player.velocity.x < -1 {
+                        body.xScale = -abs(body.xScale)
+                    }
+                }
+
+                // Drive animation state.
+                switch game.player.animation {
+                case .walking:
+                    animationController.setMovement(isMoving: true)
+                case .chopping, .idle:
+                    animationController.setMovement(isMoving: false)
                 }
             }
 
-            switch game.player.animation {
-            case .walking:
-                animationController?.setMovement(isMoving: true, isRunning: false)
-            case .chopping:
-                break
-            case .idle:
-                animationController?.setMovement(isMoving: false, isRunning: false)
+            // ── Chop-strike feedback ──────────────────────────────────────
+            if let chopStrike = game.lastChopStrike,
+               chopStrike.id != lastChopStrikeID
+            {
+                lastChopStrikeID = chopStrike.id
+                animationController.playChop()
+                if let node = playerNode {
+                    playChopShake(on: node)
+                }
             }
 
-            if let cameraEntity {
-                let target = SIMD3<Float>(
-                    Float(game.camera.center.x),
-                    0,
-                    Float(game.camera.center.y)
-                )
-                let zoomScale = max(Float(game.camera.zoomScale), 0.001)
-                let cameraHeight = VisualScale.cameraBaseHeight / zoomScale
-                let cameraDistance = VisualScale.cameraBaseDistance / zoomScale
-                let cameraPosition = SIMD3<Float>(target.x, cameraHeight, target.z + cameraDistance)
-                let cameraPitchRadians = -atan2(cameraHeight, cameraDistance)
-                let cameraRotation = simd_quatf(
-                    angle: cameraPitchRadians,
-                    axis: SIMD3<Float>(1, 0, 0)
-                )
-                cameraEntity.transform = Transform(
-                    scale: SIMD3<Float>(repeating: 1),
-                    rotation: cameraRotation,
-                    translation: cameraPosition
-                )
-            }
-
+            // ── Trees ─────────────────────────────────────────────────────
             let renderRadius = GameData.treeRenderRadius
             let keepRadius = renderRadius + GameData.treeRenderHysteresis
-            let playerPosition = game.player.position
+            let playerPos = game.player.position
+
             let visibleTrees = game.worldTrees.filter { tree in
-                let dx = tree.worldPosition.x - playerPosition.x
-                let dy = tree.worldPosition.y - playerPosition.y
-                let distance = hypot(dx, dy)
-
-                // Existing nodes are kept slightly longer to avoid
-                // rapid spawn/despawn churn at the radius boundary.
-                if treeEntities[tree.key] != nil {
-                    return distance <= keepRadius
-                }
-                return distance <= renderRadius
+                let dx = tree.worldPosition.x - playerPos.x
+                let dy = tree.worldPosition.y - playerPos.y
+                let dist = hypot(dx, dy)
+                // Keep existing nodes slightly beyond the render radius to
+                // reduce spawn/despawn churn at the boundary.
+                return treeNodes[tree.key] != nil ? dist <= keepRadius : dist <= renderRadius
             }
+
             var seenKeys = Set<String>()
-
-            let maxRenderedTrees = 220
-            for tree in visibleTrees.prefix(maxRenderedTrees) {
+            for tree in visibleTrees.prefix(220) {
                 seenKeys.insert(tree.key)
-
                 let isFelled = tree.logsRemaining <= 0 || tree.isDepleted
-                if let existing = treeEntities[tree.key] {
-                    let shouldSwap = (existing.name == "tree" && isFelled) || (existing.name == "stump" && !isFelled)
-                    if shouldSwap {
+                let p = tree.worldPosition
+
+                if let existing = treeNodes[tree.key] {
+                    // Swap the node if the tree was just felled (or
+                    // unexpectedly respawned).
+                    let isStump = existing.name == "stump"
+                    if isStump != isFelled {
                         existing.removeFromParent()
-                        treeEntities.removeValue(forKey: tree.key)
+                        treeNodes.removeValue(forKey: tree.key)
                     } else {
-                        existing.position = SIMD3<Float>(
-                            Float(tree.worldPosition.x),
-                            0.0,
-                            Float(tree.worldPosition.y)
-                        )
+                        existing.position = CGPoint(x: p.x, y: -p.y)
+                        existing.zPosition = CGFloat(p.y)
                         continue
                     }
                 }
 
-                let entity = ForestSceneView.makeTreeEntity(species: tree.species, isFelled: isFelled)
-                entity.position = SIMD3<Float>(
-                    Float(tree.worldPosition.x),
-                    0.0,
-                    Float(tree.worldPosition.y)
-                )
-                anchor.addChild(entity)
-                treeEntities[tree.key] = entity
+                let node = makeTreeNode(species: tree.species, isFelled: isFelled)
+                node.position = CGPoint(x: p.x, y: -p.y)
+                node.zPosition = CGFloat(p.y)
+                scene.addChild(node)
+                treeNodes[tree.key] = node
             }
 
-            let staleTreeKeys = treeEntities.keys.filter { !seenKeys.contains($0) }
-            for key in staleTreeKeys {
-                treeEntities[key]?.removeFromParent()
-                treeEntities.removeValue(forKey: key)
+            // Remove nodes for trees that have scrolled out of range.
+            for key in treeNodes.keys where !seenKeys.contains(key) {
+                treeNodes[key]?.removeFromParent()
+                treeNodes.removeValue(forKey: key)
             }
 
-            let desiredGroundCoords = ChunkManager.loadedChunkSet(around: game.player.position)
-            let currentGroundCoords = Set(groundTiles.keys)
-            for coord in desiredGroundCoords where groundTiles[coord] == nil {
-                let tile = GroundTileGenerator.makeTileEntity(coord: coord)
-                anchor.addChild(tile)
+            // ── Ground tiles ──────────────────────────────────────────────
+            let desiredCoords = ChunkManager.loadedChunkSet(around: game.player.position)
+            for coord in desiredCoords where groundTiles[coord] == nil {
+                let tile = makeGroundTile(coord: coord)
+                scene.addChild(tile)
                 groundTiles[coord] = tile
             }
-            for coord in currentGroundCoords where !desiredGroundCoords.contains(coord) {
+            for coord in groundTiles.keys where !desiredCoords.contains(coord) {
                 groundTiles[coord]?.removeFromParent()
                 groundTiles.removeValue(forKey: coord)
             }
         }
-    }
 
-    private func makeGroundEntity() -> ModelEntity {
-        let material = SimpleMaterial(
-            color: UIColor(TimberlineTheme.Scene3D.dirt),
-            roughness: 0.95,
-            isMetallic: false
-        )
-        let mesh = MeshResource.generatePlane(width: 400, height: 400)
-        let entity = ModelEntity(mesh: mesh, materials: [material])
-        entity.position = SIMD3<Float>(0, -0.01, 0)
-        entity.transform.rotation = simd_quatf(angle: -.pi / 2, axis: SIMD3<Float>(1, 0, 0))
-        return entity
-    }
+        // MARK: Node factories
 
-    private func makePlayerEntity() -> Entity {
-        let candidates = ["Skiller", "Skiller_Idle", "Skiller_Walking", "Skiller_Running", "Skiller_Chopping"]
+        private func makePlayerNode() -> SKNode {
+            let root = SKNode()
+            root.name = "player"
 
-        for candidate in candidates {
-            if let url = Bundle.module.url(forResource: candidate, withExtension: "usdz", subdirectory: "Character"),
-               let assetEntity = try? Entity.loadModel(contentsOf: url) {
-                let entity = assetEntity
-                entity.transform.rotation = simd_quatf(
-                    angle: VisualScale.characterModelCorrectionRadians,
-                    axis: SIMD3<Float>(1, 0, 0)
+            // Legs
+            for (xOffset, legName) in [(-5, "legL"), (5, "legR")] as [(Int, String)] {
+                let leg = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.Scene3D.shorts),
+                    size: CGSize(width: 7, height: 14)
                 )
-                Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
-                entity.position = SIMD3<Float>(0, 0, 0)
-                return entity
+                leg.name = legName
+                leg.position = CGPoint(x: xOffset, y: 8)
+                root.addChild(leg)
             }
 
-            if let assetEntity = try? Entity.loadModel(named: candidate) {
-                let entity = assetEntity
-                entity.transform.rotation = simd_quatf(
-                    angle: VisualScale.characterModelCorrectionRadians,
-                    axis: SIMD3<Float>(1, 0, 0)
+            // Torso
+            let body = SKSpriteNode(
+                color: UIColor(TimberlineTheme.Scene3D.vest),
+                size: CGSize(width: 18, height: 20)
+            )
+            body.name = "body"
+            body.position = CGPoint(x: 0, y: 24)
+            root.addChild(body)
+
+            // Head
+            let head = SKShapeNode(circleOfRadius: 9.5)
+            head.name = "head"
+            head.fillColor = UIColor(TimberlineTheme.Scene3D.skin)
+            head.strokeColor = .clear
+            head.position = CGPoint(x: 0, y: 46)
+            root.addChild(head)
+
+            // Straw hat — brim
+            let brim = SKSpriteNode(
+                color: UIColor(TimberlineTheme.Scene3D.hatStraw),
+                size: CGSize(width: 26, height: 3)
+            )
+            brim.position = CGPoint(x: 0, y: 52)
+            root.addChild(brim)
+
+            // Straw hat — crown
+            let crown = SKShapeNode(circleOfRadius: 7)
+            crown.fillColor = UIColor(TimberlineTheme.Scene3D.hatStraw)
+            crown.strokeColor = .clear
+            crown.position = CGPoint(x: 0, y: 57)
+            root.addChild(crown)
+
+            return root
+        }
+
+        private func makeTreeNode(species: TreeSpecies, isFelled: Bool) -> SKNode {
+            let root = SKNode()
+            root.name = isFelled ? "stump" : "tree"
+
+            if isFelled {
+                // Draw a flat ellipse for the stump top.
+                let stump = SKShapeNode(ellipseOf: CGSize(width: 14, height: 8))
+                stump.fillColor = UIColor(TimberlineTheme.Scene3D.trunk)
+                stump.strokeColor = UIColor(TimberlineTheme.Scene3D.trunkDark)
+                stump.lineWidth = 1.5
+                root.addChild(stump)
+                return root
+            }
+
+            let trunkColor = TimberlineTheme.Scene3D.trunkColor(for: species)
+            let trunkHeight: CGFloat = 30
+
+            // Trunk rectangle — its base sits at the node origin (which is
+            // used as the Y-sort anchor), so the sprite is offset upward.
+            let trunk = SKSpriteNode(
+                color: UIColor(trunkColor),
+                size: CGSize(width: 10, height: trunkHeight)
+            )
+            trunk.position = CGPoint(x: 0, y: trunkHeight / 2)
+            root.addChild(trunk)
+
+            // Canopy — try the bundled PNG leaf sprites first; fall back to
+            // a plain coloured circle if the texture is unavailable.
+            let (baseColor, _) = TimberlineTheme.Scene3D.canopy(for: species)
+            let radius = canopyRadius(for: species)
+            let tier = canopyTier(for: species)
+            let canopyY = trunkHeight + radius * 0.7
+
+            if let tex = loadTexture(named: "Leaf_Tier\(tier)", subdirectory: "LeafSprites") {
+                let diameter = radius * 2
+                let canopy = SKSpriteNode(texture: tex, size: CGSize(width: diameter, height: diameter))
+                canopy.colorBlendFactor = 0.4
+                canopy.color = UIColor(baseColor)
+                canopy.position = CGPoint(x: 0, y: canopyY)
+                root.addChild(canopy)
+            } else {
+                let canopy = SKShapeNode(circleOfRadius: radius)
+                canopy.fillColor = UIColor(baseColor)
+                canopy.strokeColor = .clear
+                canopy.position = CGPoint(x: 0, y: canopyY)
+                root.addChild(canopy)
+            }
+
+            return root
+        }
+
+        private func makeGroundTile(coord: ChunkCoord) -> SKSpriteNode {
+            let size = CGFloat(GameData.chunkSize)
+            let worldX = CGFloat(coord.x) * size + size / 2
+            let worldY = CGFloat(coord.y) * size + size / 2
+
+            let tile: SKSpriteNode
+            if let tex = loadTexture(named: "Grass_Tileable", subdirectory: "Environment/Ground") {
+                tile = SKSpriteNode(texture: tex, size: CGSize(width: size, height: size))
+            } else {
+                tile = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.Scene3D.grass),
+                    size: CGSize(width: size, height: size)
                 )
-                Self.normalizeModelScale(entity, targetHeight: VisualScale.playerHeight)
-                entity.position = SIMD3<Float>(0, 0, 0)
-                return entity
             }
+
+            tile.position = CGPoint(x: worldX, y: -worldY)
+            // Ground tiles always render beneath every other sprite.
+            tile.zPosition = -10_000
+            tile.name = "groundTile"
+            return tile
         }
 
-        let material = SimpleMaterial(
-            color: UIColor(TimberlineTheme.Scene3D.trunk),
-            roughness: 0.7,
-            isMetallic: false
-        )
-        let mesh = MeshResource.generateBox(size: SIMD3<Float>(0.6, 1.2, 0.6))
-        let entity = ModelEntity(mesh: mesh, materials: [material])
-        entity.position = SIMD3<Float>(0, 0.6, 0)
-        return entity
-    }
+        // MARK: Animations
 
-    @MainActor
-    private static func makeTreeEntity(species: TreeSpecies, isFelled: Bool) -> Entity {
-        let assetName: String
-        if isFelled {
+        private func playChopShake(on node: SKNode) {
+            let shake = SKAction.sequence([
+                SKAction.moveBy(x: 3, y: 0, duration: 0.05),
+                SKAction.moveBy(x: -6, y: 0, duration: 0.05),
+                SKAction.moveBy(x: 3, y: 0, duration: 0.05),
+            ])
+            node.run(shake)
+        }
+
+        // MARK: Texture cache
+
+        private static var textureCache: [String: SKTexture] = [:]
+
+        private func loadTexture(named name: String, subdirectory: String) -> SKTexture? {
+            let key = "\(subdirectory)/\(name)"
+            if let cached = Self.textureCache[key] { return cached }
+            guard let url = Bundle.module.url(
+                forResource: name, withExtension: "png", subdirectory: subdirectory
+            ),
+                let uiImage = UIImage(contentsOfFile: url.path)
+            else { return nil }
+            let texture = SKTexture(image: uiImage)
+            Self.textureCache[key] = texture
+            return texture
+        }
+
+        // MARK: Per-species helpers
+
+        private func canopyRadius(for species: TreeSpecies) -> CGFloat {
             switch species {
-            case .birch:
-                assetName = "Stump_Tier1_Common"
-            case .oak:
-                assetName = "Stump_Tier2_Oak"
-            case .willow:
-                assetName = "Stump_Tier3_Willow"
-            case .evergreen:
-                assetName = "Stump_Tier4_Elder"
-            case .ancientYew:
-                assetName = "Stump_Tier4_Elder"
-            case .elderwood:
-                assetName = "Stump_Tier5_Enchanted"
+            case .birch:     return 32
+            case .oak:       return 40
+            case .willow:    return 38
+            case .evergreen: return 30
+            case .ancientYew:return 44
+            case .elderwood: return 50
             }
-        } else {
+        }
+
+        private func canopyTier(for species: TreeSpecies) -> Int {
             switch species {
-            case .birch:
-                assetName = "Tree_Tier1_Common"
-            case .oak:
-                assetName = "Tree_Tier2_Oak"
-            case .willow:
-                assetName = "Tree_Tier3_Willow"
-            case .evergreen:
-                assetName = "Tree_Tier4_Elder"
-            case .ancientYew:
-                assetName = "Tree_Tier4_Elder"
-            case .elderwood:
-                assetName = "Tree_Tier5_Enchanted"
+            case .birch:     return 1
+            case .oak:       return 2
+            case .willow:    return 3
+            case .evergreen: return 4
+            case .ancientYew:return 4
+            case .elderwood: return 5
             }
-        }
-
-        // Determine subdirectory for tree vs stump and try package resource URL
-        let subdir = isFelled ? "Environment/Stumps" : "Environment/Trees"
-        if let assetEntity = loadCachedModel(named: assetName, subdirectory: subdir) {
-            let entity = assetEntity
-            normalizeModelScale(entity, targetHeight: targetTreeHeight(for: species, isFelled: isFelled))
-            entity.position = SIMD3<Float>(0, 0, 0)
-            entity.name = isFelled ? "stump" : "tree"
-            return entity
-        }
-
-        // Fallback to legacy named lookup
-        if let assetEntity = try? Entity.loadModel(named: assetName) {
-            let entity = assetEntity
-            normalizeModelScale(entity, targetHeight: targetTreeHeight(for: species, isFelled: isFelled))
-            entity.position = SIMD3<Float>(0, 0, 0)
-            entity.name = isFelled ? "stump" : "tree"
-            return entity
-        }
-
-        let material = SimpleMaterial(color: UIColor.systemGreen, roughness: 0.8, isMetallic: false)
-        let mesh = MeshResource.generateBox(size: SIMD3<Float>(0.6, 2.2, 0.6))
-        let entity = ModelEntity(mesh: mesh, materials: [material])
-        entity.position = SIMD3<Float>(0, 1.1, 0)
-        entity.name = isFelled ? "stump" : "tree"
-        return entity
-    }
-
-    @MainActor
-    private static var modelPrototypeCache: [String: Entity] = [:]
-
-    @MainActor
-    private static func loadCachedModel(named assetName: String, subdirectory: String) -> Entity? {
-        let cacheKey = "\(subdirectory)/\(assetName)"
-        if let prototype = modelPrototypeCache[cacheKey] {
-            return prototype.clone(recursive: true)
-        }
-
-        let loaded: Entity?
-        if let url = Bundle.module.url(forResource: assetName, withExtension: "usdz", subdirectory: subdirectory),
-           let fromURL = try? Entity.loadModel(contentsOf: url) {
-            loaded = fromURL
-        } else if let fromNamed = try? Entity.loadModel(named: assetName) {
-            loaded = fromNamed
-        } else {
-            loaded = nil
-        }
-
-        guard let loaded else { return nil }
-        modelPrototypeCache[cacheKey] = loaded
-        return loaded.clone(recursive: true)
-    }
-
-    @MainActor
-    private static func normalizeModelScale(_ entity: Entity, targetHeight: Float) {
-        let currentHeight = entity.visualBounds(relativeTo: nil).extents.y
-        guard currentHeight > 0.0001 else { return }
-        let multiplier = targetHeight / currentHeight
-        entity.scale *= SIMD3<Float>(repeating: multiplier)
-    }
-
-    private static func targetTreeHeight(for species: TreeSpecies, isFelled: Bool) -> Float {
-        if isFelled { return VisualScale.stumpHeight }
-
-        switch species {
-        case .birch: return 92
-        case .oak: return 90
-        case .willow: return 88
-        case .evergreen: return 80
-        case .ancientYew: return 98
-        case .elderwood: return 106
         }
     }
 }
