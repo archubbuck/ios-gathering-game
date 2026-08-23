@@ -248,6 +248,7 @@ struct ForestSceneView: UIViewRepresentable {
                 color: UIColor(TimberlineTheme.barkLight),
                 size: CGSize(width: 3, height: 20)
             )
+            // Hold the axe at the same slight diagonal as the 3D model.
             let axeTiltRadians: CGFloat = -.25
             axeHandle.zRotation = axeTiltRadians
             axeHandle.position = CGPoint(x: 14, y: 20)
