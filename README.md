@@ -6,10 +6,10 @@ A medieval-fantasy woodcutting idle game for iOS, inspired by Old School
 RuneScape's Woodcutting skill. Tap trees in an isometric forest, gather
 logs, level from 1 to 99, and upgrade your axe from Bronze to Dragon.
 
-Fully offline, no backend. The forest scene is a low-poly 3D world
-rendered with SceneKit (procedural primitive geometry, no `.scn`/texture
-assets); HUD and menus are SwiftUI. The repo contains no image assets
-except the app icon.
+Fully offline, no backend. The forest scene is a 2D SpriteKit world using
+procedural sprite-node art and bundled PNG textures; HUD and menus are
+SwiftUI. The former USDZ model assets are not bundled because the renderer
+no longer uses SceneKit or RealityKit.
 
 - **Platform:** iOS 16.0+, iPhone, portrait only
 - **App package:** `Timberline.swiftpm` (Xcode-compatible Swift package)

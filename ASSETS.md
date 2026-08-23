@@ -1,35 +1,16 @@
 # ASSETS.md
 Reference index for all game-ready assets used in the woodcutting skiller prototype.
-All assets were generated via Meshy. USDZ is the primary format for RealityKit import;
-GLB/FBX originals are kept as source backups for re-export if ever needed.
+The shipped game is now 2D: SpriteKit draws the player, trunks, and stumps from
+procedural nodes, while PNG textures provide foliage and ground art. The former
+USDZ model exports were removed from the app bundle because they are no longer
+used by the renderer.
 
 ---
 
 ## 📁 Folder Structure (suggested)
 
 Resources/
-├── Character/
-│   ├── Skiller.usdz              # base rigged character (bind pose)
-│   ├── Skiller_Idle.usdz         # calm idle loop
-│   ├── Skiller_Walk.usdz
-│   ├── Skiller_Run.usdz
-│   ├── Skiller_Chop.usdz
-│   └── source/                   # GLB/FBX originals kept for re-export if needed
 ├── Environment/
-│   ├── Trees/
-│   │   ├── Tree_Tier1_Common.usdz
-│   │   ├── Tree_Tier2_Oak.usdz
-│   │   ├── Tree_Tier3_Willow.usdz
-│   │   ├── Tree_Tier4_Elder.usdz
-│   │   ├── Tree_Tier5_Enchanted.usdz
-│   │   └── source/                # GLB originals
-│   ├── Stumps/
-│   │   ├── Stump_Tier1_Common.usdz
-│   │   ├── Stump_Tier2_Oak.usdz
-│   │   ├── Stump_Tier3_Willow.usdz
-│   │   ├── Stump_Tier4_Elder.usdz
-│   │   ├── Stump_Tier5_Enchanted.usdz
-│   │   └── source/                # GLB originals
 │   ├── LeafSprites/
 │   │   ├── Leaf_Tier1.png
 │   │   ├── Leaf_Tier2.png
@@ -121,14 +102,9 @@ discussed as an option but not generated — ground is texture-only for now.
 
 ## 🗂 Format Guide
 
-- **USDZ** — primary format for all RealityKit assets: character (+ 4 animations) and
-  all 10 tree/stump models across 5 tiers. Load via `Entity(named:)` / `ModelEntity`.
-- **GLB** — kept as source backup for every USDZ above; convert back from GLB if a USDZ
-  ever needs regenerating (e.g. after a texture/mesh fix).
-- **FBX** — cross-pipeline backup for the character rig only, not used directly in the
-  iOS app.
-- **PNG** — leaf sprites and ground texture; used as sprite textures / particle textures /
-  material base color maps.
+- **PNG** — leaf sprites and ground texture; used as SpriteKit and particle textures.
+- **Swift** — `ForestSceneView` contains the 2D node factories for the player, trees,
+  stumps, and streamed ground tiles.
 
 ---
 
