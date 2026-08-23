@@ -87,7 +87,7 @@ struct ForestSceneView: UIViewRepresentable {
                 node.position = CGPoint(x: p.x, y: -p.y)
                 // Sort by the character's feet so its whole silhouette is
                 // behind a tree when its feet are behind the tree's base.
-                node.zPosition = depthZ(forWorldY: p.y, bias: playerDepthBias)
+                node.zPosition = p.y + playerDepthBias
 
                 // Mirror sprite horizontally when walking left/right.
                 if let body = node.childNode(withName: "body") as? SKSpriteNode {
@@ -147,14 +147,14 @@ struct ForestSceneView: UIViewRepresentable {
                         treeNodes.removeValue(forKey: tree.key)
                     } else {
                         existing.position = CGPoint(x: p.x, y: -p.y)
-                        existing.zPosition = depthZ(forWorldY: p.y)
+                        existing.zPosition = p.y
                         continue
                     }
                 }
 
                 let node = makeTreeNode(species: tree.species, isFelled: isFelled)
                 node.position = CGPoint(x: p.x, y: -p.y)
-                node.zPosition = depthZ(forWorldY: p.y)
+                node.zPosition = p.y
                 scene.addChild(node)
                 treeNodes[tree.key] = node
             }
@@ -179,10 +179,6 @@ struct ForestSceneView: UIViewRepresentable {
         }
 
         // MARK: Node factories
-
-        private func depthZ(forWorldY worldY: CGFloat, bias: CGFloat = 0) -> CGFloat {
-            worldY + bias
-        }
 
         private func makePlayerNode() -> SKNode {
             let root = SKNode()
