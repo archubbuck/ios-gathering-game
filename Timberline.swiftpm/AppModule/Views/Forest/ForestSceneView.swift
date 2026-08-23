@@ -197,6 +197,7 @@ struct ForestSceneView: UIViewRepresentable {
                     color: UIColor(TimberlineTheme.SceneArt.shoes),
                     size: CGSize(width: 9, height: 5)
                 )
+                shoe.name = legName == "legL" ? "shoeL" : "shoeR"
                 shoe.position = CGPoint(x: xOffset, y: 2)
                 root.addChild(shoe)
             }
@@ -247,7 +248,8 @@ struct ForestSceneView: UIViewRepresentable {
                 color: UIColor(TimberlineTheme.barkLight),
                 size: CGSize(width: 3, height: 20)
             )
-            axeHandle.zRotation = -.25
+            let axeTiltRadians: CGFloat = -.25
+            axeHandle.zRotation = axeTiltRadians
             axeHandle.position = CGPoint(x: 14, y: 20)
             root.addChild(axeHandle)
 
@@ -255,7 +257,7 @@ struct ForestSceneView: UIViewRepresentable {
                 color: UIColor(AxeArt.metalColors(for: .bronze).light),
                 size: CGSize(width: 10, height: 7)
             )
-            axeHead.zRotation = -.25
+            axeHead.zRotation = axeTiltRadians
             axeHead.position = CGPoint(x: 16, y: 29)
             root.addChild(axeHead)
 
