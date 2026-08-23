@@ -260,17 +260,15 @@ struct ForestSceneView: UIViewRepresentable {
                 color: UIColor(axeMetal.light),
                 size: CGSize(width: 10, height: 7)
             )
-            axeHead.zRotation = axeTiltRadians
-            axeHead.position = CGPoint(x: 16, y: 29)
-            root.addChild(axeHead)
+            axeHead.position = CGPoint(x: 2, y: 9)
+            axeHandle.addChild(axeHead)
 
             let axeBladeEdge = SKSpriteNode(
                 color: UIColor(axeMetal.dark),
                 size: CGSize(width: 10, height: 2)
             )
-            axeBladeEdge.zRotation = axeTiltRadians
-            axeBladeEdge.position = CGPoint(x: 16, y: 26.5)
-            root.addChild(axeBladeEdge)
+            axeBladeEdge.position = CGPoint(x: 2, y: 6.5)
+            axeHandle.addChild(axeBladeEdge)
 
             // Head
             let head = SKShapeNode(circleOfRadius: 9.5)
