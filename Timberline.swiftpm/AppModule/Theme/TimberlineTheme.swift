@@ -55,9 +55,7 @@ enum TimberlineTheme {
     static let hudLogWarning = Color(hex: 0xC65A3F)
     static let hudBackground = Color(hex: 0xF4F6F2)
 
-    /// Canonical palette for the 3D SceneKit forest. The 2D menu art in
-    /// `Views/Art/TreeArt.swift` should migrate to these species colors as
-    /// a follow-up so both stay in sync.
+    /// Canonical palette for the SpriteKit forest scene and its procedural art.
     enum SceneArt {
         static let grass = Color(hex: 0xA5CE4D)
         /// Fog color AND scene background — the two must stay identical so
