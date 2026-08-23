@@ -232,6 +232,7 @@ struct ForestSceneView: UIViewRepresentable {
                     color: UIColor(TimberlineTheme.SceneArt.shirt),
                     size: CGSize(width: 6, height: 10)
                 )
+                sleeve.name = xOffset < 0 ? "sleeveL" : "sleeveR"
                 sleeve.position = CGPoint(x: xOffset, y: 32)
                 root.addChild(sleeve)
 
@@ -239,6 +240,7 @@ struct ForestSceneView: UIViewRepresentable {
                     color: UIColor(TimberlineTheme.SceneArt.skin),
                     size: CGSize(width: 5, height: 9)
                 )
+                forearm.name = xOffset < 0 ? "forearmL" : "forearmR"
                 forearm.position = CGPoint(x: xOffset, y: 24)
                 root.addChild(forearm)
             }
