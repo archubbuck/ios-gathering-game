@@ -32,7 +32,7 @@ Resources/
 | Felled stumps | `ForestSceneView` | Procedural 2D ellipse nodes |
 
 Each tree tier uses its matching leaf sprite. Species colors, trunk colors, and
-node dimensions are centralized in `TimberlineTheme.Scene3D` and the
+node dimensions are centralized in `TimberlineTheme.SceneArt` and the
 per-species helpers in `ForestSceneView`.
 
 ## Character art

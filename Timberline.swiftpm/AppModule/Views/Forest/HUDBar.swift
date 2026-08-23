@@ -119,7 +119,7 @@ struct HUDBar: View {
                 HStack(spacing: 8) {
                     Image(systemName: "flask.fill")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(TimberlineTheme.Scene3D.potionGlow)
+                        .foregroundStyle(TimberlineTheme.SceneArt.potionGlow)
                     Text("Woodcutting +\(GameData.woodcuttingPotionLevelBoost) — \(formattedCountdown(remaining))")
                         .font(.stat(11, weight: .semibold))
                         .foregroundStyle(TimberlineTheme.hudTextDark)

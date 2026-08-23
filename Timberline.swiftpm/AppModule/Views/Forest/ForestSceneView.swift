@@ -26,7 +26,7 @@ struct ForestSceneView: UIViewRepresentable {
 
         let scene = SKScene()
         scene.scaleMode = .resizeFill
-        scene.backgroundColor = UIColor(TimberlineTheme.Scene3D.haze)
+        scene.backgroundColor = UIColor(TimberlineTheme.SceneArt.haze)
         // (0,0) at the scene centre makes camera positioning simple.
         scene.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
@@ -186,7 +186,7 @@ struct ForestSceneView: UIViewRepresentable {
             // Legs
             for (xOffset, legName) in [(-5, "legL"), (5, "legR")] as [(Int, String)] {
                 let leg = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.Scene3D.shorts),
+                    color: UIColor(TimberlineTheme.SceneArt.shorts),
                     size: CGSize(width: 7, height: 14)
                 )
                 leg.name = legName
@@ -196,7 +196,7 @@ struct ForestSceneView: UIViewRepresentable {
 
             // Torso
             let body = SKSpriteNode(
-                color: UIColor(TimberlineTheme.Scene3D.vest),
+                color: UIColor(TimberlineTheme.SceneArt.vest),
                 size: CGSize(width: 18, height: 20)
             )
             body.name = "body"
@@ -206,14 +206,14 @@ struct ForestSceneView: UIViewRepresentable {
             // Head
             let head = SKShapeNode(circleOfRadius: 9.5)
             head.name = "head"
-            head.fillColor = UIColor(TimberlineTheme.Scene3D.skin)
+            head.fillColor = UIColor(TimberlineTheme.SceneArt.skin)
             head.strokeColor = .clear
             head.position = CGPoint(x: 0, y: 46)
             root.addChild(head)
 
             // Straw hat — brim
             let brim = SKSpriteNode(
-                color: UIColor(TimberlineTheme.Scene3D.hatStraw),
+                color: UIColor(TimberlineTheme.SceneArt.hatStraw),
                 size: CGSize(width: 26, height: 3)
             )
             brim.position = CGPoint(x: 0, y: 52)
@@ -221,7 +221,7 @@ struct ForestSceneView: UIViewRepresentable {
 
             // Straw hat — crown
             let crown = SKShapeNode(circleOfRadius: 7)
-            crown.fillColor = UIColor(TimberlineTheme.Scene3D.hatStraw)
+            crown.fillColor = UIColor(TimberlineTheme.SceneArt.hatStraw)
             crown.strokeColor = .clear
             crown.position = CGPoint(x: 0, y: 57)
             root.addChild(crown)
@@ -236,14 +236,14 @@ struct ForestSceneView: UIViewRepresentable {
             if isFelled {
                 // Draw a flat ellipse for the stump top.
                 let stump = SKShapeNode(ellipseOf: CGSize(width: 14, height: 8))
-                stump.fillColor = UIColor(TimberlineTheme.Scene3D.trunk)
-                stump.strokeColor = UIColor(TimberlineTheme.Scene3D.trunkDark)
+                stump.fillColor = UIColor(TimberlineTheme.SceneArt.trunk)
+                stump.strokeColor = UIColor(TimberlineTheme.SceneArt.trunkDark)
                 stump.lineWidth = 1.5
                 root.addChild(stump)
                 return root
             }
 
-            let trunkColor = TimberlineTheme.Scene3D.trunkColor(for: species)
+            let trunkColor = TimberlineTheme.SceneArt.trunkColor(for: species)
             let trunkHeight: CGFloat = 30
 
             // Trunk rectangle — its base sits at the node origin (which is
@@ -257,7 +257,7 @@ struct ForestSceneView: UIViewRepresentable {
 
             // Canopy — try the bundled PNG leaf sprites first; fall back to
             // a plain coloured circle if the texture is unavailable.
-            let (baseColor, _) = TimberlineTheme.Scene3D.canopy(for: species)
+            let (baseColor, _) = TimberlineTheme.SceneArt.canopy(for: species)
             let radius = canopyRadius(for: species)
             let tier = canopyTier(for: species)
             let canopyY = trunkHeight + radius * 0.7
@@ -290,7 +290,7 @@ struct ForestSceneView: UIViewRepresentable {
                 tile = SKSpriteNode(texture: tex, size: CGSize(width: size, height: size))
             } else {
                 tile = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.Scene3D.grass),
+                    color: UIColor(TimberlineTheme.SceneArt.grass),
                     size: CGSize(width: size, height: size)
                 )
             }

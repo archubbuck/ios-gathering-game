@@ -58,7 +58,7 @@ enum TimberlineTheme {
     /// Canonical palette for the 3D SceneKit forest. The 2D menu art in
     /// `Views/Art/TreeArt.swift` should migrate to these species colors as
     /// a follow-up so both stay in sync.
-    enum Scene3D {
+    enum SceneArt {
         static let grass = Color(hex: 0xA5CE4D)
         /// Fog color AND scene background — the two must stay identical so
         /// distant geometry fades seamlessly into the backdrop.

@@ -58,7 +58,7 @@ struct MinimapView: View {
                 )
                 context.stroke(
                     Path(ellipseIn: ringRect),
-                    with: .color(TimberlineTheme.Scene3D.minimapDot(for: species).opacity(0.55)),
+                    with: .color(TimberlineTheme.SceneArt.minimapDot(for: species).opacity(0.55)),
                     lineWidth: 2
                 )
             }
@@ -74,7 +74,7 @@ struct MinimapView: View {
                 )
                 context.fill(
                     Path(ellipseIn: rect),
-                    with: .color(TimberlineTheme.Scene3D.minimapDot(for: tree.species).opacity(0.85))
+                    with: .color(TimberlineTheme.SceneArt.minimapDot(for: tree.species).opacity(0.85))
                 )
             }
 
@@ -97,7 +97,7 @@ struct MinimapView: View {
                 diamond.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
                 diamond.addLine(to: CGPoint(x: rect.minX, y: rect.midY))
                 diamond.closeSubpath()
-                context.fill(diamond, with: .color(TimberlineTheme.Scene3D.potionMinimapDot))
+                context.fill(diamond, with: .color(TimberlineTheme.SceneArt.potionMinimapDot))
             }
         }
         .frame(width: diameter, height: diameter)
