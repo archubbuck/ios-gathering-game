@@ -91,6 +91,25 @@ struct ForestView: View {
                             .padding(14)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                             .zIndex(15)
+
+                        // Feedback toasts (pack full, tree unavailable).
+                        if let notice = game.feedbackNotice {
+                            FeedbackToast(notice: notice)
+                                .id(notice.id)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .padding(.bottom, 60)
+                                .zIndex(18)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+
+                        // Save-error banner.
+                        if game.saveError != nil {
+                            SaveErrorBanner()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                                .padding(.bottom, 4)
+                                .zIndex(22)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
                     }
                     .clipped()
                     // Frosted materials must read as *white* glass even when the
@@ -119,6 +138,28 @@ struct ForestView: View {
                             levelUpBanner = nil
                         }
                     }
+                }
+            }
+        }
+        .onChange(of: game.feedbackNotice) { notice in
+            guard notice != nil else { return }
+            Task {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        if game.feedbackNotice?.id == notice?.id {
+                            game.feedbackNotice = nil
+                        }
+                    }
+                }
+            }
+        }
+        .onChange(of: game.saveError) { err in
+            guard err != nil else { return }
+            Task {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                await MainActor.run {
+                    withAnimation { game.saveError = nil }
                 }
             }
         }
@@ -208,5 +249,82 @@ private struct ChopDwellOverlay: View {
             }
             .allowsHitTesting(false)
         }
+    }
+}
+
+/// Non-blocking toast for pack-full, tree-unavailable, and similar feedback.
+private struct FeedbackToast: View {
+    let notice: FeedbackNotice
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: iconName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(tint)
+            Text(message)
+                .font(.stat(13, weight: .semibold))
+                .foregroundStyle(TimberlineTheme.hudTextDark)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 11)
+        .background(
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .background(Capsule().fill(TimberlineTheme.hudPanelTint))
+                .overlay(Capsule().strokeBorder(TimberlineTheme.hudBorder, lineWidth: 1))
+        )
+        .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
+        .allowsHitTesting(false)
+        .accessibilityLabel(message)
+    }
+
+    private var iconName: String {
+        switch notice.kind {
+        case .packFull:       return "tray.full.fill"
+        case .treeUnavailable: return "hourglass"
+        case .loadingChunks:  return "arrow.clockwise"
+        }
+    }
+
+    private var tint: Color {
+        switch notice.kind {
+        case .packFull:       return TimberlineTheme.hudLogWarning
+        case .treeUnavailable: return TimberlineTheme.forestGreen.opacity(0.7)
+        case .loadingChunks:  return TimberlineTheme.hudTextDark.opacity(0.6)
+        }
+    }
+
+    private var message: String {
+        switch notice.kind {
+        case .packFull:
+            return "Pack full"
+        case .treeUnavailable(let species):
+            return "\(species.displayName) is still regrowing"
+        case .loadingChunks:
+            return "Loading forest…"
+        }
+    }
+}
+
+/// Slim banner shown when a save write fails; stays visible until dismissed
+/// automatically after 4 s.
+private struct SaveErrorBanner: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "exclamationmark.icloud.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(TimberlineTheme.hudLogWarning)
+            Text("Save failed — progress may be lost")
+                .font(.stat(12, weight: .semibold))
+                .foregroundStyle(TimberlineTheme.hudTextDark)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(Color.white.opacity(0.95))
+        .overlay(Rectangle().frame(height: 1).foregroundStyle(TimberlineTheme.hudLogWarning).opacity(0.6),
+                 alignment: .top)
+        .allowsHitTesting(false)
+        .accessibilityLabel("Save failed. Your recent progress may not be stored.")
     }
 }

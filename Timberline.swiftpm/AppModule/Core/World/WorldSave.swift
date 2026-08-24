@@ -1,18 +1,26 @@
 import Foundation
 
-/// Persisted world state for Timberline: a fixed world seed and the
-/// set of felled tree IDs that should remain stumps across launches.
+/// Persisted world state for Timberline: a fixed world seed, a map of
+/// felled-tree respawn deadlines (seconds since 1970), and schema version.
+///
+/// `felledTreeDeadlines` is the single authoritative source for which trees
+/// are currently stumps and when they regrow. Each entry is written when a
+/// tree falls and removed (by `WorldSaveStore.clearDeadline`) when the tree
+/// respawns. Trees not present in the map are treated as fully grown.
 struct WorldSave: Codable {
-    // Keep a literal default so decoding older/missing-key payloads can
-    // still materialize a valid save without touching WorldSaveStore
-    // during static initialization.
-    var schemaVersion: Int = 1
+    var schemaVersion: Int = 2
     var worldSeed: UInt64
-    var felledTreeIDs: Set<String> = []
+    /// Maps tree key → Unix timestamp of the respawn deadline.
+    /// Use `TimeInterval` (Double) so the value round-trips through JSON
+    /// without precision loss and works on both iOS and macOS test targets.
+    var felledTreeDeadlines: [String: TimeInterval] = [:]
 
     static var newWorld: WorldSave {
-        var rng = SplitMix64(seed: 0xC0FFEE_BABE_DEADBE)
-        let seed = UInt64.random(in: UInt64.min...UInt64.max, using: &rng)
+        // Use true system randomness for the world seed so every new game
+        // produces a genuinely different world.  SplitMix64 is still used
+        // downstream for deterministic generation once the seed is chosen.
+        var sysRNG = SystemRandomNumberGenerator()
+        let seed = UInt64.random(in: UInt64.min...UInt64.max, using: &sysRNG)
         return WorldSave(
             schemaVersion: WorldSaveStore.currentSchemaVersion,
             worldSeed: seed
@@ -20,7 +28,7 @@ struct WorldSave: Codable {
     }
 }
 
-/// Deterministic 64-bit PRNG used by world generation and save creation.
+/// Deterministic 64-bit PRNG used by world generation.
 struct SplitMix64: RandomNumberGenerator {
     private var state: UInt64
 
@@ -39,7 +47,7 @@ struct SplitMix64: RandomNumberGenerator {
 }
 
 enum WorldSaveStore {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
     private static var cachedCurrent: WorldSave?
     private static let currentLock = NSLock()
 
@@ -83,29 +91,75 @@ enum WorldSaveStore {
 
     static func load() -> WorldSave? {
         if let data = try? Data(contentsOf: saveURL),
-           var worldSave = try? JSONDecoder().decode(WorldSave.self, from: data)
+           let worldSave = migrate(try? JSONDecoder().decode(WorldSave.self, from: data))
         {
-            if worldSave.schemaVersion < currentSchemaVersion {
-                worldSave.schemaVersion = currentSchemaVersion
-            }
             return worldSave
         }
 
         if let backupData = try? Data(contentsOf: backupURL),
-           var backupWorldSave = try? JSONDecoder().decode(WorldSave.self, from: backupData)
+           let worldSave = migrate(try? JSONDecoder().decode(WorldSave.self, from: backupData))
         {
-            if backupWorldSave.schemaVersion < currentSchemaVersion {
-                backupWorldSave.schemaVersion = currentSchemaVersion
-            }
-            return backupWorldSave
+            return worldSave
+        }
+
+        // Try migrating a v1 save that has felledTreeIDs instead of deadlines.
+        if let data = try? Data(contentsOf: saveURL),
+           let worldSave = migrateV1(data)
+        {
+            return worldSave
+        }
+        if let backupData = try? Data(contentsOf: backupURL),
+           let worldSave = migrateV1(backupData)
+        {
+            return worldSave
         }
 
         return nil
     }
 
+    /// Returns the save if it is current; bumps schemaVersion if needed.
+    private static func migrate(_ save: WorldSave?) -> WorldSave? {
+        guard var save else { return nil }
+        if save.schemaVersion < currentSchemaVersion {
+            save.schemaVersion = currentSchemaVersion
+        }
+        return save
+    }
+
+    /// Handle schema v1 saves that stored `felledTreeIDs: [String]` instead
+    /// of `felledTreeDeadlines: [String: TimeInterval]`.
+    private static func migrateV1(_ data: Data) -> WorldSave? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawSeed = json["worldSeed"] as? UInt64 ?? (json["worldSeed"] as? NSNumber).map({ UInt64($0.uint64Value) })
+        else { return nil }
+        var save = WorldSave(schemaVersion: currentSchemaVersion, worldSeed: rawSeed)
+        // For any previously-felled tree that had no deadline, assign a
+        // generous far-future deadline so it respawns rather than staying
+        // a stump forever (since the decision is: respawn after deadline).
+        if let ids = json["felledTreeIDs"] as? [String] {
+            let far = Date().addingTimeInterval(60 * 60).timeIntervalSince1970 // 1 hour from now
+            for id in ids {
+                save.felledTreeDeadlines[id] = far
+            }
+        }
+        return save
+    }
+
     static func save(_ worldSave: WorldSave) {
         current = worldSave
         persistToDisk(worldSave)
+    }
+
+    /// Record that a tree was felled and should respawn at `deadline`.
+    static func setDeadline(for key: String, deadline: TimeInterval) {
+        current.felledTreeDeadlines[key] = deadline
+        persistToDisk(current)
+    }
+
+    /// Remove a respawn deadline once the tree has regrown.
+    static func clearDeadline(for key: String) {
+        current.felledTreeDeadlines.removeValue(forKey: key)
+        persistToDisk(current)
     }
 
     private static func persistToDisk(_ worldSave: WorldSave) {
@@ -120,7 +174,11 @@ enum WorldSaveStore {
             }
             try data.write(to: saveURL, options: .atomic)
         } catch {
-            print("WorldSaveStore.save failed: \(error)")
+            NotificationCenter.default.post(
+                name: .worldSaveDidFail,
+                object: nil,
+                userInfo: ["error": error]
+            )
         }
     }
 
@@ -132,4 +190,12 @@ enum WorldSaveStore {
         current = fresh
         persistToDisk(fresh)
     }
+}
+
+extension Notification.Name {
+    /// Posted on the default center whenever a world-save write fails.
+    /// `userInfo["error"]` carries the underlying `Error`.
+    static let worldSaveDidFail = Notification.Name("worldSaveDidFail")
+    /// Posted on the default center whenever a player-save write fails.
+    static let playerSaveDidFail = Notification.Name("playerSaveDidFail")
 }

@@ -230,19 +230,6 @@ enum GameData {
         ),
     ]
 
-    // MARK: Stamina
-
-    static let maxStamina: Double = 100
-    /// Stamina drained per second while walking or chopping.
-    static let staminaDrainPerSecond: Double = 14
-    /// Stamina regenerated per second while idle.
-    static let staminaRegenPerSecond: Double = 20
-    /// Movement speed multiplier applied while stamina is at zero.
-    static let exhaustedSpeedMultiplier: CGFloat = 0.5
-    /// Chop-tick interval multiplier applied while stamina is at zero
-    /// (chopping takes longer per attempt when exhausted).
-    static let exhaustedTickMultiplier: Double = 1.75
-
     // MARK: Minimap
 
     /// World-space radius shown on the minimap, centered on the player.

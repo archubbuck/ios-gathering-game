@@ -1,13 +1,12 @@
 import SwiftUI
 
 /// Top HUD: level badge with XP progress, region name, gold, pack count,
-/// and stamina.
+/// and loading indicator.
 struct HUDBar: View {
     @EnvironmentObject private var game: GameState
 
     /// Derived from the device's available canvas size (see `DeviceScale`)
-    /// so the badge/stamina bar stay proportionate from iPhone SE to iPad
-    /// instead of staying a fixed pixel size on every device.
+    /// so the badge stays proportionate from iPhone SE to iPad.
     var scale: CGFloat = 1
 
     var body: some View {
@@ -28,6 +27,7 @@ struct HUDBar: View {
                 }
                 .frame(width: badgeSize, height: badgeSize)
                 .shadow(color: .black.opacity(0.12), radius: 3, y: 1)
+                .accessibilityLabel("Woodcutting level \(game.level)")
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(biomeName)
@@ -36,6 +36,8 @@ struct HUDBar: View {
                     ProgressView(value: progress.fraction)
                         .tint(TimberlineTheme.hudStamina)
                         .scaleEffect(y: 1.4)
+                        .accessibilityLabel("XP progress")
+                        .accessibilityValue("\(Int(progress.current)) of \(Int(progress.needed)) XP")
                     Text(
                         game.level >= XPTable.maxLevel
                             ? "Max level!"
@@ -55,12 +57,14 @@ struct HUDBar: View {
                         tint: TimberlineTheme.hudLogGold,
                         onLight: true
                     )
+                    .accessibilityLabel("\(game.gold) gold")
                     StatChip(
                         systemImage: "tray.full.fill",
                         text: "\(game.packCount)/\(GameData.inventorySlots)",
                         tint: game.packIsFull ? TimberlineTheme.hudLogWarning : TimberlineTheme.forestGreen,
                         onLight: true
                     )
+                    .accessibilityLabel("Pack \(game.packCount) of \(GameData.inventorySlots)")
                 }
             }
 
@@ -68,45 +72,26 @@ struct HUDBar: View {
                 potionBoostRow
             }
 
-            staminaRow
+            if game.loadingChunks {
+                loadingRow
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
-        // Sits outside the scene ZStack, so a real Material would have
-        // nothing to blur — a solid light strip is the honest equivalent.
         .background(Color.white.opacity(0.95))
     }
 
-    /// Compact stamina meter spanning the full HUD width, dimming and
-    /// swapping its icon when empty (matches the exhausted movement/chop
-    /// penalty applied in `GameState`).
-    private var staminaRow: some View {
+    /// Small indicator shown while background chunk generation is running.
+    private var loadingRow: some View {
         HStack(spacing: 8) {
-            Image(systemName: isExhausted ? "bolt.slash.fill" : "bolt.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(
-                    isExhausted
-                        ? TimberlineTheme.hudTextDark.opacity(0.4)
-                        : TimberlineTheme.hudStamina
-                )
-                .frame(width: 16)
-
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(TimberlineTheme.hudTrack)
-                    Capsule()
-                        .fill(TimberlineTheme.hudStamina)
-                        .frame(width: geo.size.width * staminaFraction)
-                    Capsule().strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
-                }
-            }
-            .frame(height: 14 * scale)
-
-            Text("\(Int(game.stamina.rounded()))/\(Int(GameData.maxStamina.rounded()))")
-                .font(.stat(10 * scale, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(TimberlineTheme.hudTextDark.opacity(0.8))
+            ProgressView()
+                .controlSize(.mini)
+            Text("Loading forest…")
+                .font(.stat(11, weight: .regular))
+                .foregroundStyle(TimberlineTheme.hudTextDark.opacity(0.7))
+            Spacer()
         }
+        .accessibilityLabel("Loading nearby trees")
     }
 
     /// Shown only while a Woodcutting Potion boost is active; a live
@@ -126,6 +111,7 @@ struct HUDBar: View {
                         .monospacedDigit()
                     Spacer()
                 }
+                .accessibilityLabel("Woodcutting potion active, \(formattedCountdown(remaining)) remaining")
             }
         }
     }
@@ -134,13 +120,6 @@ struct HUDBar: View {
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
     }
-
-    private var staminaFraction: Double {
-        guard GameData.maxStamina > 0 else { return 0 }
-        return max(0, min(1, game.stamina / GameData.maxStamina))
-    }
-
-    private var isExhausted: Bool { game.stamina <= 0 }
 
     /// Derive a biome name from player distance.
     private var biomeName: String {

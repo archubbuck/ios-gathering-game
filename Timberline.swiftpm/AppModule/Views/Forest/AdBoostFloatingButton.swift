@@ -47,6 +47,8 @@ struct AdBoostFloatingButton: View {
             .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("Watch ad for woodcutting boost")
+        .accessibilityHint("Grants +\(GameData.woodcuttingPotionLevelBoost) Woodcutting level for \(Int(GameData.woodcuttingPotionDuration / 60)) minutes")
     }
 
     private func cooldownChip(expiresAt: Date) -> some View {

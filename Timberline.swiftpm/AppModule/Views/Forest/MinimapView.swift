@@ -112,6 +112,9 @@ struct MinimapView: View {
         .overlay(Circle().stroke(TimberlineTheme.hudBorder, lineWidth: 5))
         .shadow(color: .black.opacity(0.2), radius: 6, y: 2)
         .contentShape(Circle())
+        .accessibilityLabel("Minimap")
+        .accessibilityHint(isExpanded ? "Tap to collapse" : "Tap to expand")
+        .accessibilityAddTraits(.isButton)
         .onTapGesture {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 isExpanded.toggle()

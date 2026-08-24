@@ -217,6 +217,18 @@ struct ChopStrikeEvent: Identifiable, Equatable {
     let worldPosition: CGPoint
 }
 
+/// Transient HUD toast driven by `GameState.feedbackNotice`.
+struct FeedbackNotice: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case packFull
+        case treeUnavailable(species: TreeSpecies)
+        case loadingChunks
+    }
+
+    let id = UUID()
+    let kind: Kind
+}
+
 // MARK: - Persistence snapshot
 
 struct PlayerSave: Codable {
@@ -231,6 +243,9 @@ struct PlayerSave: Codable {
     var playerPosition: CGPoint
     var stats: LifetimeStats
     var unlockedAchievements: Set<String>
+    /// Key of the tree being actively chopped when the game was last saved,
+    /// if any. Restored on next launch to resume chopping at the same tree.
+    var activeChopTreeKey: String? = nil
 
     static var newGame: PlayerSave {
         PlayerSave(
@@ -244,5 +259,39 @@ struct PlayerSave: Codable {
             stats: LifetimeStats(),
             unlockedAchievements: []
         )
+    }
+
+    /// Returns a copy with all invalid field values clamped to legal ranges.
+    func repaired() -> PlayerSave {
+        var s = self
+        // Non-negative progression.
+        s.totalXP = max(0, s.totalXP)
+        s.gold = max(0, s.gold)
+        // Inventory must always be exactly `inventorySlots` elements.
+        s.inventory = Array((s.inventory + Array(repeating: nil, count: GameData.inventorySlots))
+            .prefix(GameData.inventorySlots))
+        // Must own at least the starter axe.
+        if s.ownedAxes.isEmpty { s.ownedAxes = [.bronze] }
+        // Equipped axe must be owned.
+        if !s.ownedAxes.contains(s.equippedAxe) {
+            s.equippedAxe = s.ownedAxes.sorted(by: {
+                GameData.axe(for: $0).levelReq < GameData.axe(for: $1).levelReq
+            }).first ?? .bronze
+        }
+        // Coordinates must be finite.
+        if !s.playerPosition.x.isFinite || !s.playerPosition.y.isFinite {
+            s.playerPosition = .zero
+        }
+        // Active chop key must be non-empty if present.
+        if let key = s.activeChopTreeKey, key.isEmpty {
+            s.activeChopTreeKey = nil
+        }
+        // Log counts must be non-negative.
+        s.stats.totalLogs = max(0, s.stats.totalLogs)
+        s.stats.lifetimeGold = max(0, s.stats.lifetimeGold)
+        for species in s.stats.logsBySpecies.keys {
+            s.stats.logsBySpecies[species] = max(0, s.stats.logsBySpecies[species] ?? 0)
+        }
+        return s
     }
 }

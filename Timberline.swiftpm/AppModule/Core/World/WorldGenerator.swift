@@ -53,13 +53,15 @@ enum WorldGenerator {
                 )
 
                 let key = "\(coord.x):\(coord.y):\(clusterIdx):\(treeIdx)"
-                let isFelled = WorldSaveStore.current.felledTreeIDs.contains(key)
+                let deadlineStamp = WorldSaveStore.current.felledTreeDeadlines[key]
+                let respawnUntil: Date? = deadlineStamp.map { Date(timeIntervalSince1970: $0) }
+                let isFelled = respawnUntil.map { $0 > Date() } ?? false
                 trees.append(WorldTreeState(
                     key: key,
                     species: species,
                     worldPosition: worldPos,
-                    logsRemaining: isFelled ? 0 : Int.random(in: def.logsMin...def.logsMax, using: &rng),
-                    respawnUntil: isFelled ? Date.distantFuture : nil,
+                    logsRemaining: isFelled ? 0 : Int(randomIn: def.logsMin...def.logsMax, using: &rng),
+                    respawnUntil: isFelled ? respawnUntil : nil,
                     clusterID: "\(coord.x):\(coord.y):\(clusterIdx)"
                 ))
             }
