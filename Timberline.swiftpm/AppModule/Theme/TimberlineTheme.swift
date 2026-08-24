@@ -79,14 +79,23 @@ enum TimberlineTheme {
         static let sunlight = Color(hex: 0xFFF4E0)
         static let ambient = Color(hex: 0xD7E8CE)
 
-        // Player
-        static let hatStraw = Color(hex: 0xE8C04A)
-        static let hatBand = Color(hex: 0x8A6430)
-        static let skin = Color(hex: 0xF3C99F)
-        static let shirt = Color(hex: 0xF2EDDC)
-        static let vest = Color(hex: 0x3E4A40)
-        static let shorts = Color(hex: 0x4C7BC4)
-        static let shoes = Color(hex: 0xE8A33D)
+        // Player: the orange-haired, green-scarfed adventurer.
+        static let skin = Color(hex: 0xE8AA82)
+        static let skinShadow = Color(hex: 0xB96F51)
+        static let hair = Color(hex: 0xA95116)
+        static let hairShadow = Color(hex: 0x71320F)
+        static let eye = Color(hex: 0x29150E)
+        static let scarf = Color(hex: 0x2D821C)
+        static let scarfShadow = Color(hex: 0x155410)
+        static let shirt = Color(hex: 0x0D527A)
+        static let shirtShadow = Color(hex: 0x083653)
+        static let leather = Color(hex: 0x92500F)
+        static let leatherHighlight = Color(hex: 0xC17A1B)
+        static let pants = Color(hex: 0x3D2415)
+        static let boots = Color(hex: 0xA83B0A)
+        static let bootTrim = Color(hex: 0xD18B20)
+        static let belt = Color(hex: 0x08786E)
+        static let bracer = Color(hex: 0x711B2C)
 
         /// Base + lighter highlight-facet pair for each species' canopy.
         static func canopy(for species: TreeSpecies) -> (base: Color, highlight: Color) {
