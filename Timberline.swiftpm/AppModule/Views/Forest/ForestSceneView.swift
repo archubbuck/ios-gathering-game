@@ -60,6 +60,7 @@ struct ForestSceneView: UIViewRepresentable {
         var animationController = SkillerAnimationController()
         // Break equal-foot-position ties in favour of the player.
         private let playerDepthBias: CGFloat = 0.001
+        // Player art layers must remain below the feet-based world depth bias.
         private let playerLayerScale: CGFloat = 0.00001
 
         func update(game: GameState) {
@@ -206,7 +207,7 @@ struct ForestSceneView: UIViewRepresentable {
             pack.strokeColor = leatherHighlight
             pack.lineWidth = 1.5
             pack.position = CGPoint(x: -12, y: 53)
-            pack.zPosition = -3
+            pack.zPosition = playerLayer(-3)
             root.addChild(pack)
 
             let packCap = SKShapeNode(ellipseOf: CGSize(width: 9, height: 11))
@@ -214,7 +215,7 @@ struct ForestSceneView: UIViewRepresentable {
             packCap.strokeColor = leather
             packCap.lineWidth = 1
             packCap.position = CGPoint(x: -14, y: 60)
-            packCap.zPosition = -2
+            packCap.zPosition = playerLayer(-2)
             root.addChild(packCap)
 
             // Brown trousers and tall red leather boots.
@@ -222,18 +223,18 @@ struct ForestSceneView: UIViewRepresentable {
                 let trouser = SKSpriteNode(color: pants, size: CGSize(width: 9, height: 24))
                 trouser.name = legName
                 trouser.position = CGPoint(x: xOffset, y: 28)
-                trouser.zPosition = -1
+                trouser.zPosition = playerLayer(-1)
                 root.addChild(trouser)
 
                 let boot = SKSpriteNode(color: boots, size: CGSize(width: 10, height: 16))
                 boot.name = legName == "legL" ? "bootL" : "bootR"
                 boot.position = CGPoint(x: xOffset, y: 11)
-                boot.zPosition = 1
+                boot.zPosition = playerLayer(1)
                 root.addChild(boot)
 
                 let cuff = SKSpriteNode(color: bootTrim, size: CGSize(width: 11, height: 4))
                 cuff.position = CGPoint(x: xOffset, y: 18)
-                cuff.zPosition = 2
+                cuff.zPosition = playerLayer(2)
                 root.addChild(cuff)
 
                 let foot = polygonNode(
@@ -246,27 +247,27 @@ struct ForestSceneView: UIViewRepresentable {
                     ],
                     color: boots
                 )
-                foot.zPosition = 2
+                foot.zPosition = playerLayer(2)
                 root.addChild(foot)
 
                 let strap = SKSpriteNode(color: bootTrim, size: CGSize(width: 4, height: 7))
                 strap.position = CGPoint(x: xOffset + 4, y: 10)
                 strap.zRotation = -0.35
-                strap.zPosition = 3
+                strap.zPosition = playerLayer(3)
                 root.addChild(strap)
             }
 
             let waistPanel = SKSpriteNode(color: pants, size: CGSize(width: 20, height: 10))
             waistPanel.name = "waist"
             waistPanel.position = CGPoint(x: 0, y: 40)
-            waistPanel.zPosition = 0
+            waistPanel.zPosition = playerLayer(0)
             root.addChild(waistPanel)
 
             // Blue shirt with a warm leather tunic over the front.
             let body = SKSpriteNode(color: shirt, size: CGSize(width: 20, height: 24))
             body.name = "body"
             body.position = CGPoint(x: 0, y: 52)
-            body.zPosition = 0
+            body.zPosition = playerLayer(0)
             root.addChild(body)
 
             let shirtFacet = polygonNode(
@@ -278,7 +279,7 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: shirtShadow
             )
-            shirtFacet.zPosition = 1
+            shirtFacet.zPosition = playerLayer(1)
             root.addChild(shirtFacet)
 
             let tunic = polygonNode(
@@ -292,7 +293,7 @@ struct ForestSceneView: UIViewRepresentable {
                 color: leather
             )
             tunic.name = "leatherTunic"
-            tunic.zPosition = 2
+            tunic.zPosition = playerLayer(2)
             root.addChild(tunic)
 
             let tunicFacet = polygonNode(
@@ -304,41 +305,41 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: leatherHighlight
             )
-            tunicFacet.zPosition = 3
+            tunicFacet.zPosition = playerLayer(3)
             root.addChild(tunicFacet)
 
             let beltBand = SKSpriteNode(color: belt, size: CGSize(width: 21, height: 5))
             beltBand.position = CGPoint(x: 0, y: 41)
-            beltBand.zPosition = 4
+            beltBand.zPosition = playerLayer(4)
             root.addChild(beltBand)
 
             let beltBuckle = SKShapeNode(rectOf: CGSize(width: 4, height: 4), cornerRadius: 0.5)
             beltBuckle.fillColor = bootTrim
             beltBuckle.strokeColor = .clear
             beltBuckle.position = CGPoint(x: 4, y: 41)
-            beltBuckle.zPosition = 5
+            beltBuckle.zPosition = playerLayer(5)
             root.addChild(beltBuckle)
 
             // The blue short sleeves and wrapped forearms echo the reference's
             // layered adventurer outfit.
             let farSleeve = SKSpriteNode(color: shirtShadow, size: CGSize(width: 7, height: 13))
             farSleeve.position = CGPoint(x: -11, y: 56)
-            farSleeve.zPosition = -1
+            farSleeve.zPosition = playerLayer(-1)
             root.addChild(farSleeve)
 
             let farWrap = SKSpriteNode(color: leather, size: CGSize(width: 6, height: 10))
             farWrap.position = CGPoint(x: -12, y: 47)
-            farWrap.zPosition = 0
+            farWrap.zPosition = playerLayer(0)
             root.addChild(farWrap)
 
             let nearSleeve = SKSpriteNode(color: shirt, size: CGSize(width: 7, height: 14))
             nearSleeve.position = CGPoint(x: 11, y: 57)
-            nearSleeve.zPosition = 5
+            nearSleeve.zPosition = playerLayer(5)
             root.addChild(nearSleeve)
 
             let nearBracer = SKSpriteNode(color: UIColor(TimberlineTheme.SceneArt.bracer), size: CGSize(width: 7, height: 11))
             nearBracer.position = CGPoint(x: 12, y: 47)
-            nearBracer.zPosition = 6
+            nearBracer.zPosition = playerLayer(6)
             root.addChild(nearBracer)
 
             let nearHand = SKShapeNode(ellipseOf: CGSize(width: 7, height: 8))
@@ -346,7 +347,7 @@ struct ForestSceneView: UIViewRepresentable {
             nearHand.strokeColor = skinShadow
             nearHand.lineWidth = 1
             nearHand.position = CGPoint(x: 12, y: 42)
-            nearHand.zPosition = 7
+            nearHand.zPosition = playerLayer(7)
             root.addChild(nearHand)
 
             // Green scarf wraps the neck and trails over the shoulders.
@@ -359,7 +360,7 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: scarfShadow
             )
-            scarfTail.zPosition = 4
+            scarfTail.zPosition = playerLayer(4)
             root.addChild(scarfTail)
 
             let scarfBand = polygonNode(
@@ -374,13 +375,13 @@ struct ForestSceneView: UIViewRepresentable {
                 color: scarf
             )
             scarfBand.name = "scarf"
-            scarfBand.zPosition = 8
+            scarfBand.zPosition = playerLayer(8)
             root.addChild(scarfBand)
 
             // Neck and side-profile face.
             let neck = SKSpriteNode(color: skin, size: CGSize(width: 7, height: 8))
             neck.position = CGPoint(x: 2, y: 68)
-            neck.zPosition = 5
+            neck.zPosition = playerLayer(5)
             root.addChild(neck)
 
             let hairBack = polygonNode(
@@ -403,7 +404,7 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: hairShadow
             )
-            hairBack.zPosition = 4
+            hairBack.zPosition = playerLayer(4)
             root.addChild(hairBack)
 
             let head = SKShapeNode(ellipseOf: CGSize(width: 17, height: 20))
@@ -412,7 +413,7 @@ struct ForestSceneView: UIViewRepresentable {
             head.strokeColor = skinShadow
             head.lineWidth = 1
             head.position = CGPoint(x: 2, y: 79)
-            head.zPosition = 5
+            head.zPosition = playerLayer(5)
             root.addChild(head)
 
             let faceShadow = polygonNode(
@@ -424,7 +425,7 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: skinShadow
             )
-            faceShadow.zPosition = 6
+            faceShadow.zPosition = playerLayer(6)
             root.addChild(faceShadow)
 
             let nose = polygonNode(
@@ -435,14 +436,14 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: skin
             )
-            nose.zPosition = 7
+            nose.zPosition = playerLayer(7)
             root.addChild(nose)
 
             let eye = SKShapeNode(circleOfRadius: 1)
             eye.fillColor = UIColor(TimberlineTheme.SceneArt.eye)
             eye.strokeColor = .clear
             eye.position = CGPoint(x: 7, y: 83)
-            eye.zPosition = 8
+            eye.zPosition = playerLayer(8)
             root.addChild(eye)
 
             let hairFront = polygonNode(
@@ -462,7 +463,7 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: hair
             )
-            hairFront.zPosition = 9
+            hairFront.zPosition = playerLayer(9)
             root.addChild(hairFront)
 
             // Axe held forward at a low diagonal; flipping the root also flips
@@ -472,7 +473,7 @@ struct ForestSceneView: UIViewRepresentable {
             let axeTiltRadians = axeTiltDegrees * CGFloat.pi / 180
             axeHandle.zRotation = axeTiltRadians
             axeHandle.position = CGPoint(x: 24, y: 39)
-            axeHandle.zPosition = 10
+            axeHandle.zPosition = playerLayer(10)
             root.addChild(axeHandle)
 
             let axeMetal = AxeArt.metalColors(for: .bronze)
@@ -490,7 +491,7 @@ struct ForestSceneView: UIViewRepresentable {
             axeHead.strokeColor = UIColor(axeMetal.dark)
             axeHead.lineWidth = 1
             axeHead.position = CGPoint(x: 0, y: 0)
-            axeHead.zPosition = 1
+            axeHead.zPosition = playerLayer(1)
             axeHandle.addChild(axeHead)
 
             let axeEdge = polygonNode(
@@ -502,12 +503,9 @@ struct ForestSceneView: UIViewRepresentable {
                 ],
                 color: UIColor(axeMetal.dark)
             )
-            axeEdge.zPosition = 2
+            axeEdge.zPosition = playerLayer(2)
             axeHandle.addChild(axeEdge)
 
-            // Keep the art's internal layers while letting the player's feet
-            // remain the sole depth-sorting anchor against world objects.
-            normalizePlayerLayers(in: root)
             return root
         }
 
@@ -529,11 +527,8 @@ struct ForestSceneView: UIViewRepresentable {
             return node
         }
 
-        private func normalizePlayerLayers(in node: SKNode) {
-            for child in node.children {
-                child.zPosition *= playerLayerScale
-                normalizePlayerLayers(in: child)
-            }
+        private func playerLayer(_ value: CGFloat) -> CGFloat {
+            value * playerLayerScale
         }
 
         private func makeTreeNode(species: TreeSpecies, isFelled: Bool) -> SKNode {
