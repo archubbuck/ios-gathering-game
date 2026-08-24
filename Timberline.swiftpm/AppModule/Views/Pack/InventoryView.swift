@@ -72,6 +72,7 @@ struct InventoryView: View {
                     LogIcon(species: species)
                 }
             }
+            .accessibilityLabel(contents.map { "\($0.displayName) log" } ?? "Empty slot")
     }
 
     private func actionRow(species: TreeSpecies, count: Int) -> some View {

@@ -5,23 +5,20 @@ import AppleProductTypes
 
 let package = Package(
     name: "Timberline",
-    platforms: [.iOS("16.0")],
+    platforms: [.iOS("16.0"), .macOS("13.0")],
     products: [
         .iOSApplication(
             name: "Timberline",
             targets: ["AppModule"],
-            bundleIdentifier: "com.timberline.app",
+            bundleIdentifier: "com.adamchubbuck.timberline",
             teamIdentifier: "",
             displayVersion: "1.0",
             bundleVersion: "1",
             appIcon: .asset("AppIcon"),
             accentColor: .presetColor(.green),
-            supportedDeviceFamilies: [.phone, .pad],
+            supportedDeviceFamilies: [.phone],
             supportedInterfaceOrientations: [
                 .portrait,
-                .portraitUpsideDown(.when(deviceFamilies: [.pad])),
-                .landscapeLeft(.when(deviceFamilies: [.pad])),
-                .landscapeRight(.when(deviceFamilies: [.pad])),
             ]
         )
     ],
@@ -33,6 +30,11 @@ let package = Package(
                 .process("Assets.xcassets"),
                 .process("Resources")
             ]
+        ),
+        .testTarget(
+            name: "TimberlineTests",
+            dependencies: [],
+            path: "Tests"
         )
     ]
 )

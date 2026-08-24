@@ -33,9 +33,11 @@ enum SaveManager {
             }
             try data.write(to: saveURL, options: .atomic)
         } catch {
-            // A failed save must never crash the game; the previous
-            // save (or .bak) is still on disk.
-            print("SaveManager.save failed: \(error)")
+            NotificationCenter.default.post(
+                name: .playerSaveDidFail,
+                object: nil,
+                userInfo: ["error": error]
+            )
         }
     }
 
@@ -69,7 +71,7 @@ enum SaveManager {
                 save.inventory = arr.map { s in
                     s.flatMap { TreeSpecies(rawValue: $0) }
                 }
-                save.inventory = Self.padInventory(save.inventory)
+                // repaired() below will pad/trim to exactly inventorySlots.
             }
             if let arr = legacy["bank"] as? [[String: Any]] {
                 save.bank = arr.compactMap { dict -> ItemStack? in
@@ -100,15 +102,7 @@ enum SaveManager {
     }
 
     private static func repair(_ save: PlayerSave) -> PlayerSave {
-        var save = save
-        save.inventory = padInventory(save.inventory)
-        return save
-    }
-
-    private static func padInventory(_ inventory: [TreeSpecies?]) -> [TreeSpecies?] {
-        var inv = Array(inventory.prefix(GameData.inventorySlots))
-        while inv.count < GameData.inventorySlots { inv.append(nil) }
-        return inv
+        save.repaired()
     }
 
     private static func decodeLegacyStats(_ dict: [String: Any]) -> LifetimeStats {

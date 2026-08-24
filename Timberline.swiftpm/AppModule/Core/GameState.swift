@@ -34,17 +34,19 @@ final class GameState: NSObject, ObservableObject {
     /// The tree currently being chopped, if any.
     @Published private(set) var activeChopTreeKey: String?
 
-    /// Transient vitals — not persisted (no `PlayerSave` field). Reset to
-    /// full on every launch.
-    @Published private(set) var stamina: Double = GameData.maxStamina
-
     /// Expiry of an active Woodcutting Potion boost, if any. Transient —
-    /// not persisted, same as `stamina` — so a boost resets on relaunch.
+    /// not persisted — so a boost resets on relaunch.
     @Published private(set) var activeBoostExpiresAt: Date?
 
     /// When "Watch Ad" becomes available again after an ad-granted boost
     /// ends. Transient — not persisted, same as `activeBoostExpiresAt`.
     @Published private(set) var adBoostCooldownExpiresAt: Date?
+
+    /// True while background chunk generation is in progress.
+    @Published private(set) var loadingChunks: Bool = false
+
+    /// Non-nil while a save error banner should be shown; cleared after display.
+    @Published var saveError: Error?
 
     /// Distance traveled since last snapshot (for wanderer achievement).
     private var farthestDistanceFromOrigin: Double = 0
@@ -54,7 +56,6 @@ final class GameState: NSObject, ObservableObject {
     private var lastUpdateTime: CFTimeInterval = 0
     private var lastChopTickTime: CFTimeInterval = 0
     private var lastAutoSaveTime: CFTimeInterval = 0
-    private var respawnTasks: [String: Task<Void, Never>] = [:]
 
     // MARK: Derived
 
@@ -62,7 +63,10 @@ final class GameState: NSObject, ObservableObject {
     var packCount: Int { inventory.compactMap { $0 }.count }
     var packIsFull: Bool { !inventory.contains(nil) }
     var isChopping: Bool { activeChopTreeKey != nil }
-    var isExhausted: Bool { stamina <= 0 }
+
+    /// Feedback notice shown as a transient HUD toast; set to a new value
+    /// to show it, cleared by the view after display.
+    @Published var feedbackNotice: FeedbackNotice?
 
     /// Whether a Woodcutting Potion boost is currently in effect.
     var isWoodcuttingBoostActive: Bool {
@@ -114,7 +118,12 @@ final class GameState: NSObject, ObservableObject {
         player = PlayerState(position: pos)
         farthestDistanceFromOrigin = hypot(pos.x, pos.y)
 
-        // Generate initial chunks around the player.
+        // Restore active chop state if the tree still exists after chunk gen.
+        // Set it after super.init() via `restoreChopState(from:)`.
+        let savedChopKey = save.activeChopTreeKey
+
+        // Generate initial chunks around the player (synchronously on first launch
+        // to have trees immediately visible; subsequent loads go off-main via loadChunksInBackground).
         worldTrees = ChunkManager.generateInitial(around: pos)
         worldPickups = ChunkManager.generateInitialPickups(around: pos)
         loadedChunks = ChunkManager.loadedChunkSet(around: pos)
@@ -124,12 +133,39 @@ final class GameState: NSObject, ObservableObject {
         // Snap camera to player (no lerp on init).
         camera.snap(to: pos)
 
+        // Restore in-progress chop if the tree survived relaunch.
+        if let key = savedChopKey,
+           let tree = worldTrees.first(where: { $0.key == key }),
+           !tree.isDepleted, tree.logsRemaining > 0
+        {
+            activeChopTreeKey = key
+            player.animation = .chopping
+        }
+
         recordEvent(.info, "Welcome to Timberline. Drag to explore the forest.")
+
+        // Observe save-failure notifications to surface them in the UI.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSaveFailure(_:)),
+            name: .worldSaveDidFail,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleSaveFailure(_:)),
+            name: .playerSaveDidFail,
+            object: nil
+        )
 
         // Start the 60 fps update loop.
         lastUpdateTime = CACurrentMediaTime()
         updateLink = CADisplayLink(target: self, selector: #selector(onFrame))
         updateLink?.add(to: .main, forMode: .common)
+    }
+
+    @objc private func handleSaveFailure(_ notification: Notification) {
+        saveError = notification.userInfo?["error"] as? Error
     }
 
     deinit {
@@ -145,7 +181,7 @@ final class GameState: NSObject, ObservableObject {
         guard dt > 0, dt < 0.1 else { return } // guard against huge jumps
 
         // --- Movement ---
-        let speed = GameData.playerWalkSpeed * (isExhausted ? GameData.exhaustedSpeedMultiplier : 1)
+        let speed = GameData.playerWalkSpeed
         var moved = false
 
         if player.velocity.x != 0 || player.velocity.y != 0 {
@@ -190,16 +226,11 @@ final class GameState: NSObject, ObservableObject {
             if player.animation != idleAnimation { player.animation = idleAnimation }
         }
 
-        // --- Chunk loading ---
+        // --- Chunk loading (off-main-actor for new chunks) ---
         let newChunks = ChunkManager.loadedChunkSet(around: player.position)
         if newChunks != loadedChunks {
             let added = newChunks.subtracting(loadedChunks)
-            for coord in added {
-                let chunk = WorldGenerator.generateChunk(coord: coord)
-                worldTrees.append(contentsOf: chunk.trees)
-                worldPickups.append(contentsOf: PickupGenerator.generate(for: coord))
-            }
-            // Unload far chunks.
+            // Unload far chunks synchronously (just removing from arrays).
             let removed = loadedChunks.subtracting(newChunks)
             if !removed.isEmpty {
                 let removedKeys = Set(removed.flatMap { coord in
@@ -213,6 +244,10 @@ final class GameState: NSObject, ObservableObject {
                 worldPickups.removeAll { removedPickupKeys.contains($0.key) }
             }
             loadedChunks = newChunks
+            // Generate newly entered chunks off the main thread.
+            if !added.isEmpty {
+                loadChunksInBackground(Array(added))
+            }
         }
 
         // Refresh respawned trees and potion pickups.
@@ -230,9 +265,6 @@ final class GameState: NSObject, ObservableObject {
 
         // --- Potion pickups ---
         tickPotionPickups()
-
-        // --- Stamina ---
-        updateVitals(dt: dt)
 
         // --- Camera follow ---
         // Skipped entirely once converged (see `Camera.convergenceEpsilon`)
@@ -252,15 +284,26 @@ final class GameState: NSObject, ObservableObject {
         }
     }
 
-    /// Stamina drains while active (walking or chopping) and regenerates
-    /// while idle.
-    private func updateVitals(dt: CGFloat) {
-        let dtSeconds = Double(dt)
+    // MARK: Background chunk generation
 
-        if player.animation == .idle {
-            stamina = min(GameData.maxStamina, stamina + GameData.staminaRegenPerSecond * dtSeconds)
-        } else {
-            stamina = max(0, stamina - GameData.staminaDrainPerSecond * dtSeconds)
+    /// Generate trees and pickups for `coords` off the main actor, then
+    /// merge the results back on the main thread.
+    private func loadChunksInBackground(_ coords: [ChunkCoord]) {
+        loadingChunks = true
+        // Capture the save snapshot needed by WorldGenerator (thread-safe read).
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var newTrees: [WorldTreeState] = []
+            var newPickups: [PotionPickupState] = []
+            for coord in coords {
+                newTrees.append(contentsOf: WorldGenerator.generateChunk(coord: coord).trees)
+                newPickups.append(contentsOf: PickupGenerator.generate(for: coord))
+            }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                self.worldTrees.append(contentsOf: newTrees)
+                self.worldPickups.append(contentsOf: newPickups)
+                self.loadingChunks = false
+            }
         }
     }
 
@@ -277,9 +320,8 @@ final class GameState: NSObject, ObservableObject {
                 stopChopping()
                 return
             }
-            // Run chop ticks on interval, slower while exhausted.
-            let interval = GameData.tickInterval * (isExhausted ? GameData.exhaustedTickMultiplier : 1)
-            if now - lastChopTickTime >= interval {
+            // Run chop ticks on interval.
+            if now - lastChopTickTime >= GameData.tickInterval {
                 lastChopTickTime = now
                 performChopTick()
             }
@@ -289,19 +331,25 @@ final class GameState: NSObject, ObservableObject {
         // Not chopping — check for nearby trees.
         guard !packIsFull else { return }
 
-        // Find the nearest eligible tree within proximity radius, and
-        // separately the nearest tree that's in range but above the
-        // player's Woodcutting level, so we can warn about it if it's all
-        // that's nearby.
+        // Find the nearest eligible tree within proximity radius; separately
+        // the nearest above-level tree so we can warn; and the nearest depleted
+        // tree so we can show a "still regrowing" notice.
         var best: (key: String, dist: CGFloat, species: TreeSpecies)? = nil
         var nearestBlocked: (key: String, dist: CGFloat, species: TreeSpecies, levelReq: Int)? = nil
+        var nearestDepleted: (key: String, dist: CGFloat, species: TreeSpecies)? = nil
         for tree in worldTrees {
-            guard !tree.isDepleted, tree.logsRemaining > 0 else { continue }
-            let def = GameData.tree(for: tree.species)
             let dist = hypot(tree.worldPosition.x - player.position.x,
                              tree.worldPosition.y - player.position.y)
             guard dist <= GameData.proximityRadius else { continue }
 
+            if tree.isDepleted || tree.logsRemaining <= 0 {
+                if nearestDepleted == nil || dist < nearestDepleted!.dist {
+                    nearestDepleted = (tree.key, dist, tree.species)
+                }
+                continue
+            }
+
+            let def = GameData.tree(for: tree.species)
             guard effectiveLevel >= def.levelReq else {
                 if nearestBlocked == nil || dist < nearestBlocked!.dist {
                     nearestBlocked = (tree.key, dist, tree.species, def.levelReq)
@@ -323,6 +371,11 @@ final class GameState: NSObject, ObservableObject {
                     player.blockedTreeKey = nearestBlocked.key
                     levelGateWarning = LevelGateWarning(species: nearestBlocked.species, requiredLevel: nearestBlocked.levelReq)
                     Haptics.reject()
+                }
+            } else if let nearestDepleted {
+                if player.blockedTreeKey != nearestDepleted.key {
+                    player.blockedTreeKey = nearestDepleted.key
+                    feedbackNotice = FeedbackNotice(kind: .treeUnavailable(species: nearestDepleted.species))
                 }
             } else {
                 player.blockedTreeKey = nil
@@ -388,6 +441,7 @@ final class GameState: NSObject, ObservableObject {
         }
         guard !packIsFull else {
             recordEvent(.warning, "Your pack is full.")
+            feedbackNotice = FeedbackNotice(kind: .packFull)
             Haptics.reject()
             stopChopping()
             return
@@ -409,10 +463,10 @@ final class GameState: NSObject, ObservableObject {
 
         tree.logsRemaining -= 1
         if tree.logsRemaining <= 0 {
-            tree.respawnUntil = Date.distantFuture
+            let deadline = Date().addingTimeInterval(def.respawnSeconds)
+            tree.respawnUntil = deadline
             worldTrees[idx] = tree
-            WorldSaveStore.current.felledTreeIDs.insert(key)
-            WorldSaveStore.save(WorldSaveStore.current)
+            WorldSaveStore.setDeadline(for: key, deadline: deadline.timeIntervalSince1970)
             recordEvent(.info, "The \(def.species.displayName.lowercased()) tree falls.")
             Haptics.thud()
             stopChopping()
@@ -447,33 +501,18 @@ final class GameState: NSObject, ObservableObject {
 
     // MARK: Respawn helpers
 
-    private func scheduleRespawnRefresh(for key: String, after delay: TimeInterval) {
-        respawnTasks[key]?.cancel()
-        respawnTasks[key] = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64((delay + 0.1) * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            self?.refreshRespawn(for: key)
-        }
-    }
-
-    private func refreshRespawn(for key: String) {
-        guard let idx = worldTrees.firstIndex(where: { $0.key == key }) else { return }
-        var tree = worldTrees[idx]
-        if let until = tree.respawnUntil, until <= Date() {
-            let def = GameData.tree(for: tree.species)
-            tree.respawnUntil = nil
-            tree.logsRemaining = Int.random(in: def.logsMin...def.logsMax)
-            worldTrees[idx] = tree
-        }
-    }
-
     private func refreshAllRespawning() {
         let now = Date()
         for i in worldTrees.indices {
             if let until = worldTrees[i].respawnUntil, until <= now {
+                let key = worldTrees[i].key
                 let def = GameData.tree(for: worldTrees[i].species)
+                var rng = SystemRandomNumberGenerator()
                 worldTrees[i].respawnUntil = nil
-                worldTrees[i].logsRemaining = Int.random(in: def.logsMin...def.logsMax)
+                worldTrees[i].logsRemaining = Int.random(in: def.logsMin...def.logsMax, using: &rng)
+                // Remove the deadline from the persistent store so this tree
+                // is treated as fully grown on the next chunk reload.
+                WorldSaveStore.clearDeadline(for: key)
             }
         }
     }
@@ -726,7 +765,8 @@ final class GameState: NSObject, ObservableObject {
             equippedAxe: equippedAxe,
             playerPosition: player.position,
             stats: stats,
-            unlockedAchievements: unlockedAchievements
+            unlockedAchievements: unlockedAchievements,
+            activeChopTreeKey: activeChopTreeKey
         )
     }
 
@@ -760,9 +800,11 @@ final class GameState: NSObject, ObservableObject {
 
         player = PlayerState(position: .zero)
         farthestDistanceFromOrigin = 0
+        loadedChunks = ChunkManager.loadedChunkSet(around: .zero)
+        // Generate the initial view synchronously so the player doesn't see
+        // an empty world after a reset.
         worldTrees = ChunkManager.generateInitial(around: .zero)
         worldPickups = ChunkManager.generateInitialPickups(around: .zero)
-        loadedChunks = ChunkManager.loadedChunkSet(around: .zero)
         camera.snap(to: .zero)
     }
 

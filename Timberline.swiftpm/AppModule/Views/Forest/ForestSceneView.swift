@@ -142,7 +142,14 @@ struct ForestSceneView: UIViewRepresentable {
             }
 
             var seenKeys = Set<String>()
-            for tree in visibleTrees.prefix(220) {
+            // Select the 220 nearest trees to the player for rendering, so the
+            // visible set is stable as array order changes (no visual popping).
+            let sorted = visibleTrees.sorted {
+                let da = hypot($0.worldPosition.x - playerPos.x, $0.worldPosition.y - playerPos.y)
+                let db = hypot($1.worldPosition.x - playerPos.x, $1.worldPosition.y - playerPos.y)
+                return da < db
+            }
+            for tree in sorted.prefix(220) {
                 seenKeys.insert(tree.key)
                 let isFelled = tree.logsRemaining <= 0 || tree.isDepleted
                 let p = tree.worldPosition
