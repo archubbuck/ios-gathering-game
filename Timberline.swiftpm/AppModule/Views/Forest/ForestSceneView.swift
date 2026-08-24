@@ -26,7 +26,7 @@ struct ForestSceneView: UIViewRepresentable {
 
         let scene = SKScene()
         scene.scaleMode = .resizeFill
-        scene.backgroundColor = UIColor(TimberlineTheme.Scene3D.haze)
+        scene.backgroundColor = UIColor(TimberlineTheme.SceneArt.haze)
         // (0,0) at the scene centre makes camera positioning simple.
         scene.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
@@ -58,6 +58,8 @@ struct ForestSceneView: UIViewRepresentable {
         var groundTiles: [ChunkCoord: SKSpriteNode] = [:]
         var lastChopStrikeID: UUID?
         var animationController = SkillerAnimationController()
+        // Break equal-foot-position ties in favour of the player.
+        private let playerDepthBias: CGFloat = 0.001
 
         func update(game: GameState) {
             guard let scene else { return }
@@ -84,9 +86,9 @@ struct ForestSceneView: UIViewRepresentable {
             if let node = playerNode {
                 let p = game.player.position
                 node.position = CGPoint(x: p.x, y: -p.y)
-                // Y-sort: objects lower on screen (higher world Y) render
-                // on top of objects higher up.
-                node.zPosition = CGFloat(p.y)
+                // Sort by the character's feet so its whole silhouette is
+                // behind a tree when its feet are behind the tree's base.
+                node.zPosition = p.y + playerDepthBias
 
                 // Mirror sprite horizontally when walking left/right.
                 if let body = node.childNode(withName: "body") as? SKSpriteNode {
@@ -146,14 +148,14 @@ struct ForestSceneView: UIViewRepresentable {
                         treeNodes.removeValue(forKey: tree.key)
                     } else {
                         existing.position = CGPoint(x: p.x, y: -p.y)
-                        existing.zPosition = CGFloat(p.y)
+                        existing.zPosition = p.y
                         continue
                     }
                 }
 
                 let node = makeTreeNode(species: tree.species, isFelled: isFelled)
                 node.position = CGPoint(x: p.x, y: -p.y)
-                node.zPosition = CGFloat(p.y)
+                node.zPosition = p.y
                 scene.addChild(node)
                 treeNodes[tree.key] = node
             }
@@ -183,45 +185,121 @@ struct ForestSceneView: UIViewRepresentable {
             let root = SKNode()
             root.name = "player"
 
-            // Legs
+            // Bare calves and chunky shoes, matching the chibi woodcutter model.
             for (xOffset, legName) in [(-5, "legL"), (5, "legR")] as [(Int, String)] {
                 let leg = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.Scene3D.shorts),
-                    size: CGSize(width: 7, height: 14)
+                    color: UIColor(TimberlineTheme.SceneArt.skin),
+                    size: CGSize(width: 7, height: 12)
                 )
                 leg.name = legName
-                leg.position = CGPoint(x: xOffset, y: 8)
+                leg.position = CGPoint(x: xOffset, y: 10)
                 root.addChild(leg)
+
+                let shoe = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.SceneArt.shoes),
+                    size: CGSize(width: 9, height: 5)
+                )
+                shoe.name = legName == "legL" ? "shoeL" : "shoeR"
+                shoe.position = CGPoint(x: xOffset, y: 2)
+                root.addChild(shoe)
             }
 
-            // Torso
+            // Blue shorts
+            let shorts = SKSpriteNode(
+                color: UIColor(TimberlineTheme.SceneArt.shorts),
+                size: CGSize(width: 17, height: 8)
+            )
+            shorts.position = CGPoint(x: 0, y: 19)
+            root.addChild(shorts)
+
+            // Vest over the light shirt
             let body = SKSpriteNode(
-                color: UIColor(TimberlineTheme.Scene3D.vest),
+                color: UIColor(TimberlineTheme.SceneArt.vest),
                 size: CGSize(width: 18, height: 20)
             )
             body.name = "body"
             body.position = CGPoint(x: 0, y: 24)
             root.addChild(body)
 
+            let collar = SKSpriteNode(
+                color: UIColor(TimberlineTheme.SceneArt.shirt),
+                size: CGSize(width: 19, height: 3)
+            )
+            collar.position = CGPoint(x: 0, y: 36)
+            root.addChild(collar)
+
+            // Shirt sleeves and exposed forearms.
+            for xOffset in [-11, 11] {
+                let sleeve = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.SceneArt.shirt),
+                    size: CGSize(width: 6, height: 10)
+                )
+                sleeve.name = xOffset < 0 ? "sleeveL" : "sleeveR"
+                sleeve.position = CGPoint(x: xOffset, y: 32)
+                root.addChild(sleeve)
+
+                let forearm = SKSpriteNode(
+                    color: UIColor(TimberlineTheme.SceneArt.skin),
+                    size: CGSize(width: 5, height: 9)
+                )
+                forearm.name = xOffset < 0 ? "forearmL" : "forearmR"
+                forearm.position = CGPoint(x: xOffset, y: 24)
+                root.addChild(forearm)
+            }
+
+            // Axe held at the right side.
+            let axeHandle = SKSpriteNode(
+                color: UIColor(TimberlineTheme.barkLight),
+                size: CGSize(width: 3, height: 20)
+            )
+            // Hold the axe at the same slight diagonal as the 3D model.
+            let axeTiltDegrees: CGFloat = -14.3
+            let axeTiltRadians = axeTiltDegrees * CGFloat.pi / 180
+            axeHandle.zRotation = axeTiltRadians
+            axeHandle.position = CGPoint(x: 14, y: 20)
+            root.addChild(axeHandle)
+
+            let axeMetal = AxeArt.metalColors(for: .bronze)
+            let axeHead = SKSpriteNode(
+                color: UIColor(axeMetal.light),
+                size: CGSize(width: 10, height: 7)
+            )
+            axeHead.position = CGPoint(x: 2, y: 9)
+            axeHandle.addChild(axeHead)
+
+            let axeBladeEdge = SKSpriteNode(
+                color: UIColor(axeMetal.dark),
+                size: CGSize(width: 10, height: 2)
+            )
+            axeBladeEdge.position = CGPoint(x: 2, y: 6.5)
+            axeHandle.addChild(axeBladeEdge)
+
             // Head
             let head = SKShapeNode(circleOfRadius: 9.5)
             head.name = "head"
-            head.fillColor = UIColor(TimberlineTheme.Scene3D.skin)
+            head.fillColor = UIColor(TimberlineTheme.SceneArt.skin)
             head.strokeColor = .clear
             head.position = CGPoint(x: 0, y: 46)
             root.addChild(head)
 
             // Straw hat — brim
             let brim = SKSpriteNode(
-                color: UIColor(TimberlineTheme.Scene3D.hatStraw),
+                color: UIColor(TimberlineTheme.SceneArt.hatStraw),
                 size: CGSize(width: 26, height: 3)
             )
             brim.position = CGPoint(x: 0, y: 52)
             root.addChild(brim)
 
+            let band = SKSpriteNode(
+                color: UIColor(TimberlineTheme.SceneArt.hatBand),
+                size: CGSize(width: 15, height: 2)
+            )
+            band.position = CGPoint(x: 0, y: 56)
+            root.addChild(band)
+
             // Straw hat — crown
             let crown = SKShapeNode(circleOfRadius: 7)
-            crown.fillColor = UIColor(TimberlineTheme.Scene3D.hatStraw)
+            crown.fillColor = UIColor(TimberlineTheme.SceneArt.hatStraw)
             crown.strokeColor = .clear
             crown.position = CGPoint(x: 0, y: 57)
             root.addChild(crown)
@@ -236,14 +314,14 @@ struct ForestSceneView: UIViewRepresentable {
             if isFelled {
                 // Draw a flat ellipse for the stump top.
                 let stump = SKShapeNode(ellipseOf: CGSize(width: 14, height: 8))
-                stump.fillColor = UIColor(TimberlineTheme.Scene3D.trunk)
-                stump.strokeColor = UIColor(TimberlineTheme.Scene3D.trunkDark)
+                stump.fillColor = UIColor(TimberlineTheme.SceneArt.trunk)
+                stump.strokeColor = UIColor(TimberlineTheme.SceneArt.trunkDark)
                 stump.lineWidth = 1.5
                 root.addChild(stump)
                 return root
             }
 
-            let trunkColor = TimberlineTheme.Scene3D.trunkColor(for: species)
+            let trunkColor = TimberlineTheme.SceneArt.trunkColor(for: species)
             let trunkHeight: CGFloat = 30
 
             // Trunk rectangle — its base sits at the node origin (which is
@@ -257,7 +335,7 @@ struct ForestSceneView: UIViewRepresentable {
 
             // Canopy — try the bundled PNG leaf sprites first; fall back to
             // a plain coloured circle if the texture is unavailable.
-            let (baseColor, _) = TimberlineTheme.Scene3D.canopy(for: species)
+            let (baseColor, _) = TimberlineTheme.SceneArt.canopy(for: species)
             let radius = canopyRadius(for: species)
             let tier = canopyTier(for: species)
             let canopyY = trunkHeight + radius * 0.7
@@ -290,7 +368,7 @@ struct ForestSceneView: UIViewRepresentable {
                 tile = SKSpriteNode(texture: tex, size: CGSize(width: size, height: size))
             } else {
                 tile = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.Scene3D.grass),
+                    color: UIColor(TimberlineTheme.SceneArt.grass),
                     size: CGSize(width: size, height: size)
                 )
             }
