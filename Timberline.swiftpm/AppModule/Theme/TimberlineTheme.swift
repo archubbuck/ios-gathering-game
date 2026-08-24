@@ -95,6 +95,7 @@ enum TimberlineTheme {
         static let boots = Color(hex: 0xA83B0A)
         static let bootTrim = Color(hex: 0xD18B20)
         static let belt = Color(hex: 0x08786E)
+        static let bracer = Color(hex: 0x711B2C)
 
         /// Base + lighter highlight-facet pair for each species' canopy.
         static func canopy(for species: TreeSpecies) -> (base: Color, highlight: Color) {

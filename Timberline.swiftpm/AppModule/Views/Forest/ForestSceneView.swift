@@ -255,11 +255,11 @@ struct ForestSceneView: UIViewRepresentable {
                 root.addChild(strap)
             }
 
-            let shorts = SKSpriteNode(color: pants, size: CGSize(width: 20, height: 10))
-            shorts.name = "waist"
-            shorts.position = CGPoint(x: 0, y: 40)
-            shorts.zPosition = 0
-            root.addChild(shorts)
+            let waistPanel = SKSpriteNode(color: pants, size: CGSize(width: 20, height: 10))
+            waistPanel.name = "waist"
+            waistPanel.position = CGPoint(x: 0, y: 40)
+            waistPanel.zPosition = 0
+            root.addChild(waistPanel)
 
             // Blue shirt with a warm leather tunic over the front.
             let body = SKSpriteNode(color: shirt, size: CGSize(width: 20, height: 24))
@@ -335,10 +335,10 @@ struct ForestSceneView: UIViewRepresentable {
             nearSleeve.zPosition = 5
             root.addChild(nearSleeve)
 
-            let nearWrap = SKSpriteNode(color: scarfShadow, size: CGSize(width: 7, height: 11))
-            nearWrap.position = CGPoint(x: 12, y: 47)
-            nearWrap.zPosition = 6
-            root.addChild(nearWrap)
+            let nearBracer = SKSpriteNode(color: UIColor(TimberlineTheme.SceneArt.bracer), size: CGSize(width: 7, height: 11))
+            nearBracer.position = CGPoint(x: 12, y: 47)
+            nearBracer.zPosition = 6
+            root.addChild(nearBracer)
 
             let nearHand = SKShapeNode(ellipseOf: CGSize(width: 7, height: 8))
             nearHand.fillColor = skin
@@ -509,6 +509,7 @@ struct ForestSceneView: UIViewRepresentable {
         private func polygonNode(points: [CGPoint], color: UIColor) -> SKShapeNode {
             let path = CGMutablePath()
             guard let first = points.first else {
+                assertionFailure("polygonNode requires at least one point")
                 return SKShapeNode()
             }
             path.move(to: first)
