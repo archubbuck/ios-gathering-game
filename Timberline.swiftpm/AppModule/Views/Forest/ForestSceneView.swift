@@ -90,13 +90,12 @@ struct ForestSceneView: UIViewRepresentable {
                 // behind a tree when its feet are behind the tree's base.
                 node.zPosition = p.y + playerDepthBias
 
-                // Mirror sprite horizontally when walking left/right.
-                if let body = node.childNode(withName: "body") as? SKSpriteNode {
-                    if game.player.velocity.x > 1 {
-                        body.xScale = abs(body.xScale)
-                    } else if game.player.velocity.x < -1 {
-                        body.xScale = -abs(body.xScale)
-                    }
+                // Mirror the complete silhouette, including the face, hair, and axe,
+                // when walking left/right.
+                if game.player.velocity.x > 1 {
+                    node.xScale = abs(node.xScale)
+                } else if game.player.velocity.x < -1 {
+                    node.xScale = -abs(node.xScale)
                 }
 
                 // Drive animation state.
@@ -185,126 +184,343 @@ struct ForestSceneView: UIViewRepresentable {
             let root = SKNode()
             root.name = "player"
 
-            // Bare calves and chunky shoes, matching the chibi woodcutter model.
-            for (xOffset, legName) in [(-5, "legL"), (5, "legR")] as [(Int, String)] {
-                let leg = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.SceneArt.skin),
-                    size: CGSize(width: 7, height: 12)
-                )
-                leg.name = legName
-                leg.position = CGPoint(x: xOffset, y: 10)
-                root.addChild(leg)
+            let skin = UIColor(TimberlineTheme.SceneArt.skin)
+            let skinShadow = UIColor(TimberlineTheme.SceneArt.skinShadow)
+            let hair = UIColor(TimberlineTheme.SceneArt.hair)
+            let hairShadow = UIColor(TimberlineTheme.SceneArt.hairShadow)
+            let scarf = UIColor(TimberlineTheme.SceneArt.scarf)
+            let scarfShadow = UIColor(TimberlineTheme.SceneArt.scarfShadow)
+            let shirt = UIColor(TimberlineTheme.SceneArt.shirt)
+            let shirtShadow = UIColor(TimberlineTheme.SceneArt.shirtShadow)
+            let leather = UIColor(TimberlineTheme.SceneArt.leather)
+            let leatherHighlight = UIColor(TimberlineTheme.SceneArt.leatherHighlight)
+            let pants = UIColor(TimberlineTheme.SceneArt.pants)
+            let boots = UIColor(TimberlineTheme.SceneArt.boots)
+            let bootTrim = UIColor(TimberlineTheme.SceneArt.bootTrim)
+            let belt = UIColor(TimberlineTheme.SceneArt.belt)
 
-                let shoe = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.SceneArt.shoes),
-                    size: CGSize(width: 9, height: 5)
+            // Backpack and rear leg sit behind the rest of the silhouette.
+            let pack = SKShapeNode(ellipseOf: CGSize(width: 13, height: 20))
+            pack.fillColor = leather
+            pack.strokeColor = leatherHighlight
+            pack.lineWidth = 1.5
+            pack.position = CGPoint(x: -12, y: 53)
+            pack.zPosition = -3
+            root.addChild(pack)
+
+            let packCap = SKShapeNode(ellipseOf: CGSize(width: 9, height: 11))
+            packCap.fillColor = leatherHighlight
+            packCap.strokeColor = leather
+            packCap.lineWidth = 1
+            packCap.position = CGPoint(x: -14, y: 60)
+            packCap.zPosition = -2
+            root.addChild(packCap)
+
+            // Brown trousers and tall red leather boots.
+            for (xOffset, legName) in [(-5, "legL"), (5, "legR")] as [(CGFloat, String)] {
+                let trouser = SKSpriteNode(color: pants, size: CGSize(width: 9, height: 24))
+                trouser.name = legName
+                trouser.position = CGPoint(x: xOffset, y: 28)
+                trouser.zPosition = -1
+                root.addChild(trouser)
+
+                let boot = SKSpriteNode(color: boots, size: CGSize(width: 10, height: 16))
+                boot.name = legName == "legL" ? "bootL" : "bootR"
+                boot.position = CGPoint(x: xOffset, y: 11)
+                boot.zPosition = 1
+                root.addChild(boot)
+
+                let cuff = SKSpriteNode(color: bootTrim, size: CGSize(width: 11, height: 4))
+                cuff.position = CGPoint(x: xOffset, y: 18)
+                cuff.zPosition = 2
+                root.addChild(cuff)
+
+                let foot = polygonNode(
+                    points: [
+                        CGPoint(x: xOffset - 6, y: 6),
+                        CGPoint(x: xOffset + 6, y: 6),
+                        CGPoint(x: xOffset + 8, y: 3),
+                        CGPoint(x: xOffset + 6, y: 1),
+                        CGPoint(x: xOffset - 7, y: 1),
+                    ],
+                    color: boots
                 )
-                shoe.name = legName == "legL" ? "shoeL" : "shoeR"
-                shoe.position = CGPoint(x: xOffset, y: 2)
-                root.addChild(shoe)
+                foot.zPosition = 2
+                root.addChild(foot)
+
+                let strap = SKSpriteNode(color: bootTrim, size: CGSize(width: 4, height: 7))
+                strap.position = CGPoint(x: xOffset + 4, y: 10)
+                strap.zRotation = -0.35
+                strap.zPosition = 3
+                root.addChild(strap)
             }
 
-            // Blue shorts
-            let shorts = SKSpriteNode(
-                color: UIColor(TimberlineTheme.SceneArt.shorts),
-                size: CGSize(width: 17, height: 8)
-            )
-            shorts.position = CGPoint(x: 0, y: 19)
+            let shorts = SKSpriteNode(color: pants, size: CGSize(width: 20, height: 10))
+            shorts.name = "waist"
+            shorts.position = CGPoint(x: 0, y: 40)
+            shorts.zPosition = 0
             root.addChild(shorts)
 
-            // Vest over the light shirt
-            let body = SKSpriteNode(
-                color: UIColor(TimberlineTheme.SceneArt.vest),
-                size: CGSize(width: 18, height: 20)
-            )
+            // Blue shirt with a warm leather tunic over the front.
+            let body = SKSpriteNode(color: shirt, size: CGSize(width: 20, height: 24))
             body.name = "body"
-            body.position = CGPoint(x: 0, y: 24)
+            body.position = CGPoint(x: 0, y: 52)
+            body.zPosition = 0
             root.addChild(body)
 
-            let collar = SKSpriteNode(
-                color: UIColor(TimberlineTheme.SceneArt.shirt),
-                size: CGSize(width: 19, height: 3)
+            let shirtFacet = polygonNode(
+                points: [
+                    CGPoint(x: -9, y: 41),
+                    CGPoint(x: 2, y: 41),
+                    CGPoint(x: 8, y: 63),
+                    CGPoint(x: -7, y: 64),
+                ],
+                color: shirtShadow
             )
-            collar.position = CGPoint(x: 0, y: 36)
-            root.addChild(collar)
+            shirtFacet.zPosition = 1
+            root.addChild(shirtFacet)
 
-            // Shirt sleeves and exposed forearms.
-            for xOffset in [-11, 11] {
-                let sleeve = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.SceneArt.shirt),
-                    size: CGSize(width: 6, height: 10)
-                )
-                sleeve.name = xOffset < 0 ? "sleeveL" : "sleeveR"
-                sleeve.position = CGPoint(x: xOffset, y: 32)
-                root.addChild(sleeve)
-
-                let forearm = SKSpriteNode(
-                    color: UIColor(TimberlineTheme.SceneArt.skin),
-                    size: CGSize(width: 5, height: 9)
-                )
-                forearm.name = xOffset < 0 ? "forearmL" : "forearmR"
-                forearm.position = CGPoint(x: xOffset, y: 24)
-                root.addChild(forearm)
-            }
-
-            // Axe held at the right side.
-            let axeHandle = SKSpriteNode(
-                color: UIColor(TimberlineTheme.barkLight),
-                size: CGSize(width: 3, height: 20)
+            let tunic = polygonNode(
+                points: [
+                    CGPoint(x: -6, y: 42),
+                    CGPoint(x: 7, y: 43),
+                    CGPoint(x: 9, y: 61),
+                    CGPoint(x: 4, y: 66),
+                    CGPoint(x: -5, y: 63),
+                ],
+                color: leather
             )
-            // Hold the axe at the same slight diagonal as the 3D model.
-            let axeTiltDegrees: CGFloat = -14.3
-            let axeTiltRadians = axeTiltDegrees * CGFloat.pi / 180
+            tunic.name = "leatherTunic"
+            tunic.zPosition = 2
+            root.addChild(tunic)
+
+            let tunicFacet = polygonNode(
+                points: [
+                    CGPoint(x: 3, y: 43),
+                    CGPoint(x: 7, y: 43),
+                    CGPoint(x: 9, y: 61),
+                    CGPoint(x: 4, y: 66),
+                ],
+                color: leatherHighlight
+            )
+            tunicFacet.zPosition = 3
+            root.addChild(tunicFacet)
+
+            let beltBand = SKSpriteNode(color: belt, size: CGSize(width: 21, height: 5))
+            beltBand.position = CGPoint(x: 0, y: 41)
+            beltBand.zPosition = 4
+            root.addChild(beltBand)
+
+            let beltBuckle = SKShapeNode(rectOf: CGSize(width: 4, height: 4), cornerRadius: 0.5)
+            beltBuckle.fillColor = bootTrim
+            beltBuckle.strokeColor = .clear
+            beltBuckle.position = CGPoint(x: 4, y: 41)
+            beltBuckle.zPosition = 5
+            root.addChild(beltBuckle)
+
+            // The blue short sleeves and wrapped forearms echo the reference's
+            // layered adventurer outfit.
+            let farSleeve = SKSpriteNode(color: shirtShadow, size: CGSize(width: 7, height: 13))
+            farSleeve.position = CGPoint(x: -11, y: 56)
+            farSleeve.zPosition = -1
+            root.addChild(farSleeve)
+
+            let farWrap = SKSpriteNode(color: leather, size: CGSize(width: 6, height: 10))
+            farWrap.position = CGPoint(x: -12, y: 47)
+            farWrap.zPosition = 0
+            root.addChild(farWrap)
+
+            let nearSleeve = SKSpriteNode(color: shirt, size: CGSize(width: 7, height: 14))
+            nearSleeve.position = CGPoint(x: 11, y: 57)
+            nearSleeve.zPosition = 5
+            root.addChild(nearSleeve)
+
+            let nearWrap = SKSpriteNode(color: scarfShadow, size: CGSize(width: 7, height: 11))
+            nearWrap.position = CGPoint(x: 12, y: 47)
+            nearWrap.zPosition = 6
+            root.addChild(nearWrap)
+
+            let nearHand = SKShapeNode(ellipseOf: CGSize(width: 7, height: 8))
+            nearHand.fillColor = skin
+            nearHand.strokeColor = skinShadow
+            nearHand.lineWidth = 1
+            nearHand.position = CGPoint(x: 12, y: 42)
+            nearHand.zPosition = 7
+            root.addChild(nearHand)
+
+            // Green scarf wraps the neck and trails over the shoulders.
+            let scarfTail = polygonNode(
+                points: [
+                    CGPoint(x: -11, y: 62),
+                    CGPoint(x: -3, y: 65),
+                    CGPoint(x: -7, y: 49),
+                    CGPoint(x: -14, y: 52),
+                ],
+                color: scarfShadow
+            )
+            scarfTail.zPosition = 4
+            root.addChild(scarfTail)
+
+            let scarfBand = polygonNode(
+                points: [
+                    CGPoint(x: -10, y: 65),
+                    CGPoint(x: -5, y: 70),
+                    CGPoint(x: 8, y: 67),
+                    CGPoint(x: 12, y: 62),
+                    CGPoint(x: 7, y: 59),
+                    CGPoint(x: -7, y: 61),
+                ],
+                color: scarf
+            )
+            scarfBand.name = "scarf"
+            scarfBand.zPosition = 8
+            root.addChild(scarfBand)
+
+            // Neck and side-profile face.
+            let neck = SKSpriteNode(color: skin, size: CGSize(width: 7, height: 8))
+            neck.position = CGPoint(x: 2, y: 68)
+            neck.zPosition = 5
+            root.addChild(neck)
+
+            let hairBack = polygonNode(
+                points: [
+                    CGPoint(x: -10, y: 76),
+                    CGPoint(x: -12, y: 82),
+                    CGPoint(x: -9, y: 82),
+                    CGPoint(x: -10, y: 87),
+                    CGPoint(x: -5, y: 85),
+                    CGPoint(x: -3, y: 93),
+                    CGPoint(x: 1, y: 89),
+                    CGPoint(x: 6, y: 92),
+                    CGPoint(x: 7, y: 86),
+                    CGPoint(x: 12, y: 88),
+                    CGPoint(x: 9, y: 82),
+                    CGPoint(x: 12, y: 79),
+                    CGPoint(x: 5, y: 78),
+                    CGPoint(x: 1, y: 74),
+                    CGPoint(x: -5, y: 76),
+                ],
+                color: hairShadow
+            )
+            hairBack.zPosition = 4
+            root.addChild(hairBack)
+
+            let head = SKShapeNode(ellipseOf: CGSize(width: 17, height: 20))
+            head.name = "head"
+            head.fillColor = skin
+            head.strokeColor = skinShadow
+            head.lineWidth = 1
+            head.position = CGPoint(x: 2, y: 79)
+            head.zPosition = 5
+            root.addChild(head)
+
+            let faceShadow = polygonNode(
+                points: [
+                    CGPoint(x: 6, y: 87),
+                    CGPoint(x: 11, y: 84),
+                    CGPoint(x: 10, y: 76),
+                    CGPoint(x: 5, y: 72),
+                ],
+                color: skinShadow
+            )
+            faceShadow.zPosition = 6
+            root.addChild(faceShadow)
+
+            let nose = polygonNode(
+                points: [
+                    CGPoint(x: 9, y: 82),
+                    CGPoint(x: 14, y: 80),
+                    CGPoint(x: 9, y: 78),
+                ],
+                color: skin
+            )
+            nose.zPosition = 7
+            root.addChild(nose)
+
+            let eye = SKShapeNode(circleOfRadius: 1)
+            eye.fillColor = UIColor(TimberlineTheme.SceneArt.eye)
+            eye.strokeColor = .clear
+            eye.position = CGPoint(x: 7, y: 83)
+            eye.zPosition = 8
+            root.addChild(eye)
+
+            let hairFront = polygonNode(
+                points: [
+                    CGPoint(x: -9, y: 81),
+                    CGPoint(x: -8, y: 87),
+                    CGPoint(x: -4, y: 85),
+                    CGPoint(x: -3, y: 90),
+                    CGPoint(x: 1, y: 87),
+                    CGPoint(x: 4, y: 90),
+                    CGPoint(x: 7, y: 86),
+                    CGPoint(x: 6, y: 82),
+                    CGPoint(x: 9, y: 81),
+                    CGPoint(x: 5, y: 77),
+                    CGPoint(x: 0, y: 79),
+                    CGPoint(x: -4, y: 77),
+                ],
+                color: hair
+            )
+            hairFront.zPosition = 9
+            root.addChild(hairFront)
+
+            // Axe held forward at a low diagonal; flipping the root also flips
+            // the tool when the player changes direction.
+            let axeHandle = SKSpriteNode(color: UIColor(TimberlineTheme.barkLight), size: CGSize(width: 3, height: 31))
+            let axeTiltRadians = -70 * CGFloat.pi / 180
             axeHandle.zRotation = axeTiltRadians
-            axeHandle.position = CGPoint(x: 14, y: 20)
+            axeHandle.position = CGPoint(x: 24, y: 39)
+            axeHandle.zPosition = 10
             root.addChild(axeHandle)
 
             let axeMetal = AxeArt.metalColors(for: .bronze)
-            let axeHead = SKSpriteNode(
-                color: UIColor(axeMetal.light),
-                size: CGSize(width: 10, height: 7)
+            let axeHead = polygonNode(
+                points: [
+                    CGPoint(x: -1, y: 16),
+                    CGPoint(x: 8, y: 15),
+                    CGPoint(x: 11, y: 8),
+                    CGPoint(x: 8, y: 3),
+                    CGPoint(x: 1, y: 6),
+                    CGPoint(x: -3, y: 11),
+                ],
+                color: UIColor(axeMetal.light)
             )
-            axeHead.position = CGPoint(x: 2, y: 9)
+            axeHead.strokeColor = UIColor(axeMetal.dark)
+            axeHead.lineWidth = 1
+            axeHead.position = CGPoint(x: 0, y: 0)
+            axeHead.zPosition = 1
             axeHandle.addChild(axeHead)
 
-            let axeBladeEdge = SKSpriteNode(
-                color: UIColor(axeMetal.dark),
-                size: CGSize(width: 10, height: 2)
+            let axeEdge = polygonNode(
+                points: [
+                    CGPoint(x: 8, y: 15),
+                    CGPoint(x: 11, y: 8),
+                    CGPoint(x: 8, y: 3),
+                    CGPoint(x: 6, y: 7),
+                ],
+                color: UIColor(axeMetal.dark)
             )
-            axeBladeEdge.position = CGPoint(x: 2, y: 6.5)
-            axeHandle.addChild(axeBladeEdge)
-
-            // Head
-            let head = SKShapeNode(circleOfRadius: 9.5)
-            head.name = "head"
-            head.fillColor = UIColor(TimberlineTheme.SceneArt.skin)
-            head.strokeColor = .clear
-            head.position = CGPoint(x: 0, y: 46)
-            root.addChild(head)
-
-            // Straw hat — brim
-            let brim = SKSpriteNode(
-                color: UIColor(TimberlineTheme.SceneArt.hatStraw),
-                size: CGSize(width: 26, height: 3)
-            )
-            brim.position = CGPoint(x: 0, y: 52)
-            root.addChild(brim)
-
-            let band = SKSpriteNode(
-                color: UIColor(TimberlineTheme.SceneArt.hatBand),
-                size: CGSize(width: 15, height: 2)
-            )
-            band.position = CGPoint(x: 0, y: 56)
-            root.addChild(band)
-
-            // Straw hat — crown
-            let crown = SKShapeNode(circleOfRadius: 7)
-            crown.fillColor = UIColor(TimberlineTheme.SceneArt.hatStraw)
-            crown.strokeColor = .clear
-            crown.position = CGPoint(x: 0, y: 57)
-            root.addChild(crown)
+            axeEdge.zPosition = 2
+            axeHandle.addChild(axeEdge)
 
             return root
+        }
+
+        private func polygonNode(points: [CGPoint], color: UIColor) -> SKShapeNode {
+            let path = CGMutablePath()
+            guard let first = points.first else {
+                return SKShapeNode()
+            }
+            path.move(to: first)
+            for point in points.dropFirst() {
+                path.addLine(to: point)
+            }
+            path.closeSubpath()
+
+            let node = SKShapeNode(path: path)
+            node.fillColor = color
+            node.strokeColor = .clear
+            return node
         }
 
         private func makeTreeNode(species: TreeSpecies, isFelled: Bool) -> SKNode {

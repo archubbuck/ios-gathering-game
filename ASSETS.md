@@ -37,9 +37,12 @@ per-species helpers in `ForestSceneView`.
 
 ## Character art
 
-The player is a lightweight 2D node hierarchy consisting of legs, a torso,
-head, and hat. `SkillerAnimationController` tracks idle, walking, and chopping
-states; chop feedback is an `SKAction` shake rather than a skeletal animation.
+The player is a lightweight 2D node hierarchy styled as an orange-haired,
+green-scarfed adventurer: backpack, blue shirt, leather tunic, brown trousers,
+red boots, side-profile face, and bronze axe. The silhouette is assembled from
+flat SpriteKit polygons and sprites in `Views/Forest/ForestSceneView.swift`.
+`SkillerAnimationController` tracks idle, walking, and chopping states; chop
+feedback is an `SKAction` shake rather than a skeletal animation.
 
 ## Format guide
 
