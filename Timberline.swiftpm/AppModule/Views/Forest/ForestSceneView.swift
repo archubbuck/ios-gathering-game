@@ -62,6 +62,7 @@ struct ForestSceneView: UIViewRepresentable {
         private let playerDepthBias: CGFloat = 0.001
         // Player art layers must remain below the feet-based world depth bias.
         private let playerLayerScale: CGFloat = 0.00001
+        private let axeBaseRotation = -70 * CGFloat.pi / 180
 
         func update(game: GameState) {
             guard let scene else { return }
@@ -476,9 +477,7 @@ struct ForestSceneView: UIViewRepresentable {
             // the tool when the player changes direction.
             let axeHandle = SKSpriteNode(color: UIColor(TimberlineTheme.barkLight), size: CGSize(width: 3, height: 31))
             axeHandle.name = "axeHandle"
-            let axeTiltDegrees: CGFloat = -70
-            let axeTiltRadians = axeTiltDegrees * CGFloat.pi / 180
-            axeHandle.zRotation = axeTiltRadians
+            axeHandle.zRotation = axeBaseRotation
             axeHandle.position = CGPoint(x: 24, y: 39)
             axeHandle.zPosition = playerLayer(10)
             root.addChild(axeHandle)
@@ -646,7 +645,7 @@ struct ForestSceneView: UIViewRepresentable {
         private func playChopAnimation(on node: SKNode) {
             guard let axe = node.childNode(withName: "axeHandle") else { return }
             axe.removeAction(forKey: "chop")
-            axe.zRotation = -70 * CGFloat.pi / 180
+            axe.zRotation = axeBaseRotation
             axe.run(
                 .sequence([
                     .rotateBy(angle: -0.7, duration: 0.18),
