@@ -60,6 +60,7 @@ struct ForestSceneView: UIViewRepresentable {
         var animationController = SkillerAnimationController()
         // Break equal-foot-position ties in favour of the player.
         private let playerDepthBias: CGFloat = 0.001
+        private let playerLayerScale: CGFloat = 0.00001
 
         func update(game: GameState) {
             guard let scene else { return }
@@ -467,7 +468,8 @@ struct ForestSceneView: UIViewRepresentable {
             // Axe held forward at a low diagonal; flipping the root also flips
             // the tool when the player changes direction.
             let axeHandle = SKSpriteNode(color: UIColor(TimberlineTheme.barkLight), size: CGSize(width: 3, height: 31))
-            let axeTiltRadians = -70 * CGFloat.pi / 180
+            let axeTiltDegrees: CGFloat = -70
+            let axeTiltRadians = axeTiltDegrees * CGFloat.pi / 180
             axeHandle.zRotation = axeTiltRadians
             axeHandle.position = CGPoint(x: 24, y: 39)
             axeHandle.zPosition = 10
@@ -529,7 +531,7 @@ struct ForestSceneView: UIViewRepresentable {
 
         private func normalizePlayerLayers(in node: SKNode) {
             for child in node.children {
-                child.zPosition *= 0.00001
+                child.zPosition *= playerLayerScale
                 normalizePlayerLayers(in: child)
             }
         }
