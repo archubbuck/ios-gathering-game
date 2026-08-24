@@ -648,9 +648,9 @@ struct ForestSceneView: UIViewRepresentable {
             axe.zRotation = axeBaseRotation
             axe.run(
                 .sequence([
-                    .rotateBy(angle: -0.7, duration: 0.18),
-                    .rotateBy(angle: 0.95, duration: 0.22),
-                    .rotateBy(angle: -0.25, duration: 0.1),
+                    .rotate(byAngle: -0.7, duration: 0.18),
+                    .rotate(byAngle: 0.95, duration: 0.22),
+                    .rotate(byAngle: -0.25, duration: 0.1),
                 ]),
                 withKey: "chop"
             )
