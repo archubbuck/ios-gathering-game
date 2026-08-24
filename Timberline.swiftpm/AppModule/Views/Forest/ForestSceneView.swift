@@ -503,6 +503,9 @@ struct ForestSceneView: UIViewRepresentable {
             axeEdge.zPosition = 2
             axeHandle.addChild(axeEdge)
 
+            // Keep the art's internal layers while letting the player's feet
+            // remain the sole depth-sorting anchor against world objects.
+            normalizePlayerLayers(in: root)
             return root
         }
 
@@ -522,6 +525,13 @@ struct ForestSceneView: UIViewRepresentable {
             node.fillColor = color
             node.strokeColor = .clear
             return node
+        }
+
+        private func normalizePlayerLayers(in node: SKNode) {
+            for child in node.children {
+                child.zPosition *= 0.00001
+                normalizePlayerLayers(in: child)
+            }
         }
 
         private func makeTreeNode(species: TreeSpecies, isFelled: Bool) -> SKNode {
