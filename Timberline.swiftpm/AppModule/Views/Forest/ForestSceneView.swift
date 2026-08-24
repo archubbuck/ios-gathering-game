@@ -619,10 +619,12 @@ struct ForestSceneView: UIViewRepresentable {
                 return
             }
 
-            let legs = ["legL", "bootL", "legR", "bootR"]
-            for (index, name) in legs.enumerated() {
+            let legs = [("legL", CGFloat(28)), ("bootL", CGFloat(11)),
+                        ("legR", CGFloat(28)), ("bootR", CGFloat(11))]
+            for (index, (name, baseY)) in legs.enumerated() {
                 guard let limb = node.childNode(withName: name) else { continue }
                 limb.removeAction(forKey: "walk")
+                limb.position.y = baseY
                 let direction: CGFloat = index < 2 ? 1 : -1
                 let step = SKAction.sequence([
                     SKAction.moveBy(x: 0, y: 2 * direction, duration: 0.16),
@@ -633,14 +635,18 @@ struct ForestSceneView: UIViewRepresentable {
         }
 
         private func stopMovementAnimation(on node: SKNode) {
-            for name in ["legL", "bootL", "legR", "bootR"] {
-                node.childNode(withName: name)?.removeAction(forKey: "walk")
+            for (name, baseY) in [("legL", CGFloat(28)), ("bootL", CGFloat(11)),
+                                  ("legR", CGFloat(28)), ("bootR", CGFloat(11))] {
+                guard let limb = node.childNode(withName: name) else { continue }
+                limb.removeAction(forKey: "walk")
+                limb.position.y = baseY
             }
         }
 
         private func playChopAnimation(on node: SKNode) {
             guard let axe = node.childNode(withName: "axeHandle") else { return }
             axe.removeAction(forKey: "chop")
+            axe.zRotation = -70 * CGFloat.pi / 180
             axe.run(
                 .sequence([
                     .rotateBy(angle: -0.7, duration: 0.18),
