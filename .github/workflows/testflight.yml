@@ -145,7 +145,7 @@ jobs:
               <string>${{ steps.signing.outputs.identity }}</string>
               <key>provisioningProfiles</key>
               <dict>
-                  <key>com.adamchubbuck.timberline</key>
+                  <key>com.timberline.app</key>
                   <string>${{ steps.profile.outputs.profile_uuid }}</string>
               </dict>
           </dict>

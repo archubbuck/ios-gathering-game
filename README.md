@@ -43,7 +43,7 @@ all compiling:
 (Settings → Secrets and variables → Actions):
 
 1. `APPLE_TEAM_ID` — Apple Developer Team ID.
-2. Create the App ID `com.adamchubbuck.timberline`
+2. Create the App ID `com.timberline.app`
    (developer.apple.com → Certificates, Identifiers & Profiles).
 3. `DIST_CERT_BASE64` / `DIST_KEY_BASE64` — base64 of an Apple
    Distribution certificate and its private key.
