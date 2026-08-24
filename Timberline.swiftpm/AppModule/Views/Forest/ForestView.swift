@@ -154,8 +154,8 @@ struct ForestView: View {
                 }
             }
         }
-        .onChange(of: game.saveError) { err in
-            guard err != nil else { return }
+        .onChange(of: game.saveError != nil) { hasError in
+            guard hasError else { return }
             Task {
                 try? await Task.sleep(nanoseconds: 4_000_000_000)
                 await MainActor.run {
