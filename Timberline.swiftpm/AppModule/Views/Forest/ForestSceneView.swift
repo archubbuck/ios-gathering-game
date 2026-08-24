@@ -101,11 +101,15 @@ struct ForestSceneView: UIViewRepresentable {
                 }
 
                 // Drive animation state.
+                let previousAnimationState = animationController.currentState
                 switch game.player.animation {
                 case .walking:
                     animationController.setMovement(isMoving: true)
                 case .chopping, .idle:
                     animationController.setMovement(isMoving: false)
+                }
+                if previousAnimationState != animationController.currentState {
+                    updateMovementAnimation(on: node)
                 }
             }
 
@@ -116,6 +120,8 @@ struct ForestSceneView: UIViewRepresentable {
                 lastChopStrikeID = chopStrike.id
                 animationController.playChop()
                 if let node = playerNode {
+                    stopMovementAnimation(on: node)
+                    playChopAnimation(on: node)
                     playChopShake(on: node)
                 }
             }
@@ -469,6 +475,7 @@ struct ForestSceneView: UIViewRepresentable {
             // Axe held forward at a low diagonal; flipping the root also flips
             // the tool when the player changes direction.
             let axeHandle = SKSpriteNode(color: UIColor(TimberlineTheme.barkLight), size: CGSize(width: 3, height: 31))
+            axeHandle.name = "axeHandle"
             let axeTiltDegrees: CGFloat = -70
             let axeTiltRadians = axeTiltDegrees * CGFloat.pi / 180
             axeHandle.zRotation = axeTiltRadians
@@ -606,13 +613,52 @@ struct ForestSceneView: UIViewRepresentable {
 
         // MARK: Animations
 
+        private func updateMovementAnimation(on node: SKNode) {
+            guard animationController.currentState == .walking else {
+                stopMovementAnimation(on: node)
+                return
+            }
+
+            let legs = ["legL", "bootL", "legR", "bootR"]
+            for (index, name) in legs.enumerated() {
+                guard let limb = node.childNode(withName: name) else { continue }
+                limb.removeAction(forKey: "walk")
+                let direction: CGFloat = index < 2 ? 1 : -1
+                let step = SKAction.sequence([
+                    SKAction.moveBy(x: 0, y: 2 * direction, duration: 0.16),
+                    SKAction.moveBy(x: 0, y: -2 * direction, duration: 0.16),
+                ])
+                limb.run(.repeatForever(step), withKey: "walk")
+            }
+        }
+
+        private func stopMovementAnimation(on node: SKNode) {
+            for name in ["legL", "bootL", "legR", "bootR"] {
+                node.childNode(withName: name)?.removeAction(forKey: "walk")
+            }
+        }
+
+        private func playChopAnimation(on node: SKNode) {
+            guard let axe = node.childNode(withName: "axeHandle") else { return }
+            axe.removeAction(forKey: "chop")
+            axe.run(
+                .sequence([
+                    .rotateBy(angle: -0.7, duration: 0.18),
+                    .rotateBy(angle: 0.95, duration: 0.22),
+                    .rotateBy(angle: -0.25, duration: 0.1),
+                ]),
+                withKey: "chop"
+            )
+        }
+
         private func playChopShake(on node: SKNode) {
+            node.removeAction(forKey: "chopShake")
             let shake = SKAction.sequence([
                 SKAction.moveBy(x: 3, y: 0, duration: 0.05),
                 SKAction.moveBy(x: -6, y: 0, duration: 0.05),
                 SKAction.moveBy(x: 3, y: 0, duration: 0.05),
             ])
-            node.run(shake)
+            node.run(shake, withKey: "chopShake")
         }
 
         // MARK: Texture cache
