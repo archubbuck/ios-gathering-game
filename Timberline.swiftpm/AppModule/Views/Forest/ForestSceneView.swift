@@ -738,7 +738,9 @@ struct ForestSceneView: UIViewRepresentable {
             pivot.removeAction(forKey: "chop")
             axe.removeAction(forKey: "chop")
             pivot.position = CGPoint(x: 12, y: 42)
-            pivot.zRotation = targetAngle - GameData.axeSwingAngle
+            // Account for the handle's idle diagonal so the blade, rather
+            // than just the pivot, points toward the tree at contact.
+            pivot.zRotation = targetAngle - axeBaseRotation - GameData.axeSwingAngle
             axe.position = CGPoint(x: 12, y: 12)
             let distance = max(hypot(dx, dy) - GameData.axeContactInset, GameData.axeReach)
             axe.yScale = min(distance / GameData.axeReach, 2.0)
