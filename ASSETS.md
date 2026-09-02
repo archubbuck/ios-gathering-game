@@ -42,7 +42,11 @@ green-scarfed adventurer: backpack, blue shirt, leather tunic, brown trousers,
 red boots, side-profile face, and bronze axe. The silhouette is assembled from
 flat SpriteKit polygons and sprites in `Views/Forest/ForestSceneView.swift`.
 `SkillerAnimationController` tracks idle, walking, and chopping states; chop
-feedback is an `SKAction` shake rather than a skeletal animation.
+feedback uses eased sprite actions, a contact pause, recoil, tree shake, wood
+chips, dust, and floating log text rather than skeletal animation. The impact
+sound is intentionally optional: add `Resources/Audio/axe-impact.wav` to
+enable it. Until that placeholder asset is supplied, the game remains silent
+for audio while haptics continue to work.
 
 ## Format guide
 
@@ -50,3 +54,10 @@ feedback is an `SKAction` shake rather than a skeletal animation.
 - **Swift** — procedural 2D scene art and animation state.
 
 No SceneKit or RealityKit model assets are required by the 2D renderer.
+
+## Placeholder assets and tuning
+
+The player, stump, log bounce, shadows, particles, and tree sway are
+procedural SpriteKit effects, so they require no additional art files.
+Animation and impact feel can be adjusted in `Core/GameData.swift`; shared
+impact geometry and durations live in `Core/Scene/ImpactEffects.swift`.

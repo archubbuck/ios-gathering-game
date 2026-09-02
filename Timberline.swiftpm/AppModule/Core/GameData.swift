@@ -148,6 +148,17 @@ enum GameData {
     /// instant `GameState.performChopTick()` actually resolves.
     static let chopStrikeFraction: Double = 0.55
 
+    // MARK: Scene feel
+
+    /// Visual-only tuning values. Gameplay timing above remains authoritative.
+    static let chopSwingDuration: TimeInterval = 0.62
+    static let chopImpactPause: TimeInterval = 0.055
+    static let chopRecoilDistance: CGFloat = 2.5
+    static let walkBobHeight: CGFloat = 1.8
+    static let treeSwayAngle: CGFloat = 0.035
+    static let treeFallDuration: TimeInterval = 0.34
+    static let impactParticleCount = 8
+
     // MARK: Achievements
 
     static let achievements: [AchievementDef] = [

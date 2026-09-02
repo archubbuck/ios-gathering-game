@@ -1,5 +1,10 @@
 import Foundation
+import CoreGraphics
 
-// ImpactEffects has been retired as part of the 2D conversion.
-// The chop feedback is now a brief SKAction shake on the player node.
-enum ImpactEffects {}
+/// Shared renderer-agnostic values for the physical chop response.
+enum ImpactEffects {
+    static let contactPoint = CGPoint(x: 8, y: 22)
+    static let chipLifetime: TimeInterval = 0.42
+    static let treeShakeAngle: CGFloat = 0.045
+    static let logBounceHeight: CGFloat = 20
+}

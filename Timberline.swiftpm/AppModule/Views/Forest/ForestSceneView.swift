@@ -1,6 +1,14 @@
 import SpriteKit
 import SwiftUI
 import UIKit
+import QuartzCore
+
+private extension SKAction {
+    func eased(_ mode: SKActionTimingMode) -> SKAction {
+        timingMode = mode
+        return self
+    }
+}
 
 /// A SpriteKit-backed 2D forest scene. All world objects — ground tiles,
 /// trees, and the player — are drawn as `SKSpriteNode`s whose `zPosition`
@@ -57,6 +65,9 @@ struct ForestSceneView: UIViewRepresentable {
         var treeNodes: [String: SKNode] = [:]
         var groundTiles: [ChunkCoord: SKSpriteNode] = [:]
         var lastChopStrikeID: UUID?
+        var pendingFellAnimationKeys: Set<String> = []
+        var treeSpeciesByKey: [String: TreeSpecies] = [:]
+        var lastDustTime: TimeInterval = 0
         var animationController = SkillerAnimationController()
         // Break equal-foot-position ties in favour of the player.
         private let playerDepthBias: CGFloat = 0.001
@@ -112,6 +123,9 @@ struct ForestSceneView: UIViewRepresentable {
                 if previousAnimationState != animationController.currentState {
                     updateMovementAnimation(on: node)
                 }
+                if game.player.animation == .walking {
+                    emitWalkDust(at: node.position)
+                }
             }
 
             // ── Chop-strike feedback ──────────────────────────────────────
@@ -119,10 +133,16 @@ struct ForestSceneView: UIViewRepresentable {
                chopStrike.id != lastChopStrikeID
             {
                 lastChopStrikeID = chopStrike.id
+                if chopStrike.success,
+                   let tree = game.worldTrees.first(where: { $0.key == chopStrike.treeKey }),
+                   (tree.logsRemaining <= 0 || tree.isDepleted)
+                {
+                    pendingFellAnimationKeys.insert(chopStrike.treeKey)
+                }
                 animationController.playChop()
                 if let node = playerNode {
                     stopMovementAnimation(on: node)
-                    playChopAnimation(on: node)
+                    playChopAnimation(on: node, strike: chopStrike)
                     playChopShake(on: node)
                 }
             }
@@ -131,6 +151,9 @@ struct ForestSceneView: UIViewRepresentable {
             let renderRadius = GameData.treeRenderRadius
             let keepRadius = renderRadius + GameData.treeRenderHysteresis
             let playerPos = game.player.position
+            for tree in game.worldTrees {
+                treeSpeciesByKey[tree.key] = tree.species
+            }
 
             let visibleTrees = game.worldTrees.filter { tree in
                 let dx = tree.worldPosition.x - playerPos.x
@@ -159,7 +182,16 @@ struct ForestSceneView: UIViewRepresentable {
                     // unexpectedly respawned).
                     let isStump = existing.name == "stump"
                     if isStump != isFelled {
-                        existing.removeFromParent()
+                        if isFelled {
+                            if pendingFellAnimationKeys.contains(tree.key) {
+                                existing.position = CGPoint(x: p.x, y: -p.y)
+                                existing.zPosition = p.y
+                                continue
+                            }
+                            existing.removeFromParent()
+                        } else {
+                            existing.removeFromParent()
+                        }
                         treeNodes.removeValue(forKey: tree.key)
                     } else {
                         existing.position = CGPoint(x: p.x, y: -p.y)
@@ -519,6 +551,17 @@ struct ForestSceneView: UIViewRepresentable {
             axeEdge.zPosition = playerLayer(2)
             axeHandle.addChild(axeEdge)
 
+            let upperBody = SKNode()
+            upperBody.name = "upperBody"
+            for piece in [body, shirtFacet, tunic, tunicFacet, beltBand, beltBuckle,
+                          farSleeve, farWrap, nearSleeve, nearBracer, nearHand,
+                          scarfTail, scarfBand, neck, hairBack, head, faceShadow,
+                          nose, eye, hairFront, axeHandle] {
+                piece.removeFromParent()
+                upperBody.addChild(piece)
+            }
+            root.addChild(upperBody)
+
             return root
         }
 
@@ -547,6 +590,14 @@ struct ForestSceneView: UIViewRepresentable {
         private func makeTreeNode(species: TreeSpecies, isFelled: Bool) -> SKNode {
             let root = SKNode()
             root.name = isFelled ? "stump" : "tree"
+
+            let shadow = SKShapeNode(ellipseOf: CGSize(width: 30, height: 8))
+            shadow.fillColor = UIColor.black.withAlphaComponent(0.18)
+            shadow.strokeColor = .clear
+            shadow.position = CGPoint(x: 0, y: 2)
+            shadow.zPosition = -0.5
+            shadow.xScale = isFelled ? 0.6 : 1
+            root.addChild(shadow)
 
             if isFelled {
                 // Draw a flat ellipse for the stump top.
@@ -580,16 +631,20 @@ struct ForestSceneView: UIViewRepresentable {
             if let tex = loadTexture(named: "Leaf_Tier\(tier)", subdirectory: "LeafSprites") {
                 let diameter = radius * 2
                 let canopy = SKSpriteNode(texture: tex, size: CGSize(width: diameter, height: diameter))
+                canopy.name = "canopy"
                 canopy.colorBlendFactor = 0.4
                 canopy.color = UIColor(baseColor)
                 canopy.position = CGPoint(x: 0, y: canopyY)
                 root.addChild(canopy)
+                addTreeSway(to: canopy, species: species)
             } else {
                 let canopy = SKShapeNode(circleOfRadius: radius)
+                canopy.name = "canopy"
                 canopy.fillColor = UIColor(baseColor)
                 canopy.strokeColor = .clear
                 canopy.position = CGPoint(x: 0, y: canopyY)
                 root.addChild(canopy)
+                addTreeSway(to: canopy, species: species)
             }
 
             return root
@@ -620,6 +675,7 @@ struct ForestSceneView: UIViewRepresentable {
         // MARK: Animations
 
         private func updateMovementAnimation(on node: SKNode) {
+            node.childNode(withName: "head")?.removeAction(forKey: "idle")
             guard animationController.currentState == .walking else {
                 stopMovementAnimation(on: node)
                 return
@@ -638,6 +694,13 @@ struct ForestSceneView: UIViewRepresentable {
                 ])
                 limb.run(.repeatForever(step), withKey: "walk")
             }
+            node.childNode(withName: "upperBody")?.run(
+                .repeatForever(.sequence([
+                    .moveBy(x: 0, y: GameData.walkBobHeight, duration: 0.18),
+                    .moveBy(x: 0, y: -GameData.walkBobHeight, duration: 0.18)
+                ]).eased(.easeInEaseOut)),
+                withKey: "walkBob"
+            )
         }
 
         private func stopMovementAnimation(on node: SKNode) {
@@ -647,17 +710,36 @@ struct ForestSceneView: UIViewRepresentable {
                 limb.removeAction(forKey: "walk")
                 limb.position.y = baseY
             }
+            if let upperBody = node.childNode(withName: "upperBody") {
+                upperBody.removeAction(forKey: "walkBob")
+                upperBody.position = .zero
+            }
+            if animationController.currentState != .chopping,
+               let head = node.childNode(withName: "head") {
+                head.removeAction(forKey: "idle")
+                head.run(.repeatForever(.sequence([
+                    .moveBy(x: 0, y: 0.8, duration: 0.8).eased(.easeInEaseOut),
+                    .moveBy(x: 0, y: -0.8, duration: 0.8).eased(.easeInEaseOut)
+                ])), withKey: "idle")
+            }
         }
 
-        private func playChopAnimation(on node: SKNode) {
+        private func playChopAnimation(on node: SKNode, strike: ChopStrikeEvent) {
             guard let axe = node.childNode(withName: "axeHandle") else { return }
             axe.removeAction(forKey: "chop")
             axe.zRotation = axeBaseRotation
+            let windup = GameData.chopSwingDuration * GameData.chopStrikeFraction
+            let recovery = max(0, GameData.chopSwingDuration - windup)
             axe.run(
                 .sequence([
-                    .rotate(byAngle: -0.7, duration: 0.18),
-                    .rotate(byAngle: 0.95, duration: 0.22),
-                    .rotate(byAngle: -0.25, duration: 0.1),
+                    .rotate(byAngle: -0.7, duration: windup * 0.65).eased(.easeInEaseOut),
+                    .rotate(byAngle: 0.95, duration: windup * 0.35).eased(.easeInEaseOut),
+                    .wait(forDuration: GameData.chopImpactPause),
+                    .run { [weak self] in
+                        guard strike.success, let self else { return }
+                        self.playImpactEffects(strike: strike)
+                    },
+                    .rotate(byAngle: -0.25, duration: recovery).eased(.easeOut)
                 ]),
                 withKey: "chop"
             )
@@ -666,11 +748,140 @@ struct ForestSceneView: UIViewRepresentable {
         private func playChopShake(on node: SKNode) {
             node.removeAction(forKey: "chopShake")
             let shake = SKAction.sequence([
-                SKAction.moveBy(x: 3, y: 0, duration: 0.05),
-                SKAction.moveBy(x: -6, y: 0, duration: 0.05),
-                SKAction.moveBy(x: 3, y: 0, duration: 0.05),
+                SKAction.moveBy(x: GameData.chopRecoilDistance, y: 0, duration: 0.05),
+                SKAction.moveBy(x: -GameData.chopRecoilDistance * 2, y: 0, duration: 0.05),
+                SKAction.moveBy(x: GameData.chopRecoilDistance, y: 0, duration: 0.05),
             ])
             node.run(shake, withKey: "chopShake")
+        }
+
+        private func playImpactEffects(strike: ChopStrikeEvent) {
+            let worldPoint = CGPoint(x: strike.worldPosition.x, y: -strike.worldPosition.y)
+            guard let scene else { return }
+            Haptics.chop()
+            if let treeNode = treeNodes[strike.treeKey] {
+                treeNode.removeAction(forKey: "treeShake")
+                treeNode.run(.sequence([
+                    .rotate(byAngle: ImpactEffects.treeShakeAngle, duration: 0.045),
+                    .rotate(byAngle: -ImpactEffects.treeShakeAngle * 2, duration: 0.07),
+                    .rotate(byAngle: ImpactEffects.treeShakeAngle, duration: 0.045)
+                ]).eased(.easeInEaseOut), withKey: "treeShake")
+                if pendingFellAnimationKeys.remove(strike.treeKey) != nil,
+                   treeNode.name != "stump"
+                {
+                    let fellPosition = treeNode.position
+                    let fellDepth = treeNode.zPosition
+                    treeNode.removeFromParent()
+                    treeNodes.removeValue(forKey: strike.treeKey)
+                    animateTreeFelling(treeNode, species: speciesForTree(key: strike.treeKey))
+
+                    let stump = makeTreeNode(species: speciesForTree(key: strike.treeKey), isFelled: true)
+                    stump.position = fellPosition
+                    stump.zPosition = fellDepth
+                    scene.addChild(stump)
+                    treeNodes[strike.treeKey] = stump
+                }
+            }
+            for index in 0..<GameData.impactParticleCount {
+                let chip = SKShapeNode(rectOf: CGSize(width: 2.5, height: 2.5), cornerRadius: 0.5)
+                chip.fillColor = UIColor(TimberlineTheme.SceneArt.trunk)
+                chip.strokeColor = .clear
+                chip.position = worldPoint
+                chip.zPosition = -worldPoint.y + 2
+                let angle = CGFloat(index) / CGFloat(GameData.impactParticleCount) * 2 * .pi
+                let distance: CGFloat = 10 + CGFloat(index % 3) * 5
+                let destination = CGPoint(x: worldPoint.x + cos(angle) * distance,
+                                          y: worldPoint.y + sin(angle) * distance + 8)
+                scene.addChild(chip)
+                chip.run(.sequence([
+                    .group([
+                        .move(to: destination, duration: ImpactEffects.chipLifetime).eased(.easeOut),
+                        .rotate(byAngle: .pi, duration: ImpactEffects.chipLifetime)
+                    ]),
+                    .fadeOut(withDuration: 0.12),
+                    .removeFromParent()
+                ]))
+            }
+            let label = SKLabelNode(text: "+1 log")
+            label.fontName = "AvenirNext-Bold"
+            label.fontSize = 11
+            label.fontColor = UIColor(TimberlineTheme.gold)
+            label.position = CGPoint(x: worldPoint.x, y: worldPoint.y + 8)
+            label.zPosition = -worldPoint.y + 3
+            scene.addChild(label)
+            label.run(.sequence([
+                .moveBy(x: 0, y: 22, duration: 0.48).eased(.easeOut),
+                .fadeOut(withDuration: 0.16),
+                .removeFromParent()
+            ]))
+            // A bundled impact recording can be added later without making
+            // the scene depend on a missing placeholder asset.
+            if Bundle.module.url(forResource: "axe-impact", withExtension: "wav", subdirectory: "Audio") != nil {
+                scene.run(.playSoundFileNamed("Audio/axe-impact.wav", waitForCompletion: false))
+            }
+        }
+
+        private func emitWalkDust(at position: CGPoint) {
+            guard let scene else { return }
+            let now = CACurrentMediaTime()
+            guard now - lastDustTime > 0.14 else { return }
+            lastDustTime = now
+            let puff = SKShapeNode(ellipseOf: CGSize(width: 7, height: 3))
+            puff.fillColor = UIColor(TimberlineTheme.SceneArt.dirt).withAlphaComponent(0.45)
+            puff.strokeColor = .clear
+            puff.position = CGPoint(x: position.x, y: position.y + 2)
+            puff.zPosition = -position.y - 1
+            scene.addChild(puff)
+            puff.run(.sequence([
+                .group([
+                    .scale(to: 1.8, duration: 0.24).eased(.easeOut),
+                    .fadeOut(withDuration: 0.24)
+                ]),
+                .removeFromParent()
+            ]))
+        }
+
+        private func speciesForTree(key: String) -> TreeSpecies {
+            treeSpeciesByKey[key] ?? .oak
+        }
+
+        private func addTreeSway(to canopy: SKNode, species: TreeSpecies) {
+            let phase = CGFloat(species.rawValue.utf8.first ?? 0) / 255
+            canopy.run(.repeatForever(.sequence([
+                .rotate(toAngle: GameData.treeSwayAngle * (0.7 + phase * 0.3), duration: 1.4 + phase)
+                    .eased(.easeInEaseOut),
+                .rotate(toAngle: -GameData.treeSwayAngle * (0.7 + phase * 0.3), duration: 1.8 + phase)
+                    .eased(.easeInEaseOut)
+            ])), withKey: "sway")
+        }
+
+        private func animateTreeFelling(_ tree: SKNode, species: TreeSpecies) {
+            guard let scene else { return }
+            tree.name = "falling"
+            scene.addChild(tree)
+            let log = SKShapeNode(ellipseOf: CGSize(width: 18, height: 8))
+            log.fillColor = UIColor(TimberlineTheme.SceneArt.trunk)
+            log.strokeColor = UIColor(TimberlineTheme.SceneArt.trunkDark)
+            log.position = tree.position
+            log.zPosition = tree.zPosition + 1
+            scene.addChild(log)
+            tree.run(.sequence([
+                .group([
+                    .rotate(byAngle: -0.9, duration: GameData.treeFallDuration).eased(.easeIn),
+                    .moveBy(x: 18, y: -4, duration: GameData.treeFallDuration),
+                    .fadeOut(withDuration: GameData.treeFallDuration)
+                ]),
+                .removeFromParent()
+            ]))
+            log.run(.sequence([
+                .group([
+                    .moveBy(x: 22, y: ImpactEffects.logBounceHeight, duration: 0.16).eased(.easeOut),
+                    .rotate(byAngle: .pi, duration: 0.3)
+                ]),
+                .moveBy(x: 0, y: -ImpactEffects.logBounceHeight, duration: 0.18).eased(.easeIn),
+                .fadeOut(withDuration: 0.12),
+                .removeFromParent()
+            ]))
         }
 
         // MARK: Texture cache
