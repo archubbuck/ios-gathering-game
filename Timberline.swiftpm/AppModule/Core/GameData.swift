@@ -143,17 +143,19 @@ enum GameData {
     static let proximityRadius: CGFloat = 110
     /// Seconds the player must remain near the same tree before chopping.
     static let dwellDuration: TimeInterval = 1.2
-    /// Fraction into the chop-swing animation where the axe visually
-    /// contacts the wood — the strike keyframe lands here, matching the
-    /// instant `GameState.performChopTick()` actually resolves.
-    static let chopStrikeFraction: Double = 0.55
-
     // MARK: Scene feel
 
-    /// Visual-only tuning values. Gameplay timing above remains authoritative.
-    static let chopSwingDuration: TimeInterval = 0.62
+    /// Chop motion is deliberately shorter than the gameplay tick so it can
+    /// settle before the next attempt.
+    static let chopWindupDuration: TimeInterval = 0.13
+    static let chopSwingDuration: TimeInterval = 0.18
     static let chopImpactPause: TimeInterval = 0.055
-    static let chopRecoilDistance: CGFloat = 2.5
+    static let chopRecoilDuration: TimeInterval = 0.07
+    static let chopRecoveryDuration: TimeInterval = 0.12
+    static let chopImpactDelay: TimeInterval = chopWindupDuration + chopSwingDuration
+    static let axeSwingAngle: CGFloat = 1.15
+    static let axeReach: CGFloat = 42
+    static let axeContactInset: CGFloat = 4
     static let walkBobHeight: CGFloat = 1.8
     static let treeSwayAngle: CGFloat = 0.035
     static let treeFallDuration: TimeInterval = 0.34

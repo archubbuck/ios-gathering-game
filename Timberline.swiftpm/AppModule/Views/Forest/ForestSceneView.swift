@@ -133,6 +133,7 @@ struct ForestSceneView: UIViewRepresentable {
                chopStrike.id != lastChopStrikeID
             {
                 lastChopStrikeID = chopStrike.id
+                facePlayerTowardTree(chopStrike, node: playerNode)
                 if chopStrike.success,
                    let tree = game.worldTrees.first(where: { $0.key == chopStrike.treeKey }),
                    (tree.logsRemaining <= 0 || tree.isDepleted)
@@ -143,7 +144,6 @@ struct ForestSceneView: UIViewRepresentable {
                 if let node = playerNode {
                     stopMovementAnimation(on: node)
                     playChopAnimation(on: node, strike: chopStrike)
-                    playChopShake(on: node)
                 }
             }
 
@@ -194,7 +194,9 @@ struct ForestSceneView: UIViewRepresentable {
                         }
                         treeNodes.removeValue(forKey: tree.key)
                     } else {
-                        existing.position = CGPoint(x: p.x, y: -p.y)
+                        if existing.action(forKey: "treeShake") == nil {
+                            existing.position = CGPoint(x: p.x, y: -p.y)
+                        }
                         existing.zPosition = p.y
                         continue
                     }
@@ -512,14 +514,17 @@ struct ForestSceneView: UIViewRepresentable {
             hairFront.zPosition = playerLayer(9)
             root.addChild(hairFront)
 
-            // Axe held forward at a low diagonal; flipping the root also flips
-            // the tool when the player changes direction.
+            // The axe is a separate pivot so the feet and body stay planted.
             let axeHandle = SKSpriteNode(color: UIColor(TimberlineTheme.barkLight), size: CGSize(width: 3, height: 31))
             axeHandle.name = "axeHandle"
             axeHandle.zRotation = axeBaseRotation
-            axeHandle.position = CGPoint(x: 24, y: 39)
+            axeHandle.position = CGPoint(x: 12, y: 12)
             axeHandle.zPosition = playerLayer(10)
-            root.addChild(axeHandle)
+            let axePivot = SKNode()
+            axePivot.name = "axePivot"
+            axePivot.position = CGPoint(x: 12, y: 42)
+            root.addChild(axePivot)
+            axePivot.addChild(axeHandle)
 
             let axeMetal = AxeArt.metalColors(for: .bronze)
             let axeHead = polygonNode(
@@ -556,7 +561,7 @@ struct ForestSceneView: UIViewRepresentable {
             for piece in [body, shirtFacet, tunic, tunicFacet, beltBand, beltBuckle,
                           farSleeve, farWrap, nearSleeve, nearBracer, nearHand,
                           scarfTail, scarfBand, neck, hairBack, head, faceShadow,
-                          nose, eye, hairFront, axeHandle] {
+                          nose, eye, hairFront] {
                 piece.removeFromParent()
                 upperBody.addChild(piece)
             }
@@ -725,50 +730,82 @@ struct ForestSceneView: UIViewRepresentable {
         }
 
         private func playChopAnimation(on node: SKNode, strike: ChopStrikeEvent) {
-            guard let axe = node.childNode(withName: "axeHandle") else { return }
+            guard let pivot = node.childNode(withName: "axePivot"),
+                  let axe = pivot.childNode(withName: "axeHandle") else { return }
+            let dx = strike.worldPosition.x - strike.playerPosition.x
+            let dy = strike.worldPosition.y - strike.playerPosition.y
+            // Convert the game's downward-positive Y axis to SpriteKit's
+            // upward-positive axis, then measure from the axe's local +Y.
+            let targetAngle = atan2(dx, -dy)
+            pivot.removeAction(forKey: "chop")
             axe.removeAction(forKey: "chop")
-            axe.zRotation = axeBaseRotation
-            let windup = GameData.chopSwingDuration * GameData.chopStrikeFraction
-            let recovery = max(0, GameData.chopSwingDuration - windup)
-            axe.run(
+            pivot.position = CGPoint(x: 12, y: 42)
+            pivot.zRotation = targetAngle - GameData.axeSwingAngle
+            axe.position = CGPoint(x: 12, y: 12)
+            let distance = max(hypot(dx, dy) - GameData.axeContactInset, GameData.axeReach)
+            axe.yScale = min(distance / GameData.axeReach, 2.0)
+            pivot.run(
                 .sequence([
-                    .rotate(byAngle: -0.7, duration: windup * 0.65).eased(.easeInEaseOut),
-                    .rotate(byAngle: 0.95, duration: windup * 0.35).eased(.easeInEaseOut),
+                    .rotate(byAngle: -0.3, duration: GameData.chopWindupDuration).eased(.easeOut),
+                    .rotate(byAngle: GameData.axeSwingAngle, duration: GameData.chopSwingDuration).eased(.easeIn),
                     .wait(forDuration: GameData.chopImpactPause),
                     .run { [weak self] in
-                        guard strike.success, let self else { return }
+                        guard let self else { return }
                         self.playImpactEffects(strike: strike)
                     },
-                    .rotate(byAngle: -0.25, duration: recovery).eased(.easeOut)
+                    .rotate(byAngle: -0.14, duration: GameData.chopRecoilDuration).eased(.easeOut),
+                    .rotate(toAngle: 0, duration: GameData.chopRecoveryDuration).eased(.easeInEaseOut)
                 ]),
                 withKey: "chop"
             )
         }
 
-        private func playChopShake(on node: SKNode) {
-            node.removeAction(forKey: "chopShake")
-            let shake = SKAction.sequence([
-                SKAction.moveBy(x: GameData.chopRecoilDistance, y: 0, duration: 0.05),
-                SKAction.moveBy(x: -GameData.chopRecoilDistance * 2, y: 0, duration: 0.05),
-                SKAction.moveBy(x: GameData.chopRecoilDistance, y: 0, duration: 0.05),
-            ])
-            node.run(shake, withKey: "chopShake")
+        private func facePlayerTowardTree(_ strike: ChopStrikeEvent, node: SKNode?) {
+            guard let node else { return }
+            let dx = strike.worldPosition.x - strike.playerPosition.x
+            if abs(dx) > 1 {
+                node.xScale = dx > 0 ? abs(node.xScale) : -abs(node.xScale)
+            }
         }
 
         private func playImpactEffects(strike: ChopStrikeEvent) {
-            let worldPoint = CGPoint(x: strike.worldPosition.x, y: -strike.worldPosition.y)
+            let dx = strike.worldPosition.x - strike.playerPosition.x
+            let dy = strike.worldPosition.y - strike.playerPosition.y
+            let distance = max(hypot(dx, dy), 1)
+            let worldPoint = CGPoint(
+                x: strike.worldPosition.x - dx / distance * GameData.axeContactInset,
+                y: -strike.worldPosition.y + dy / distance * GameData.axeContactInset
+            )
             guard let scene else { return }
+            guard strike.success else { return }
             Haptics.chop()
+            var isFelling = false
             if let treeNode = treeNodes[strike.treeKey] {
+                let impactDistance = max(distance, 1)
+                let impactDirection = CGVector(dx: dx / impactDistance, dy: -dy / impactDistance)
                 treeNode.removeAction(forKey: "treeShake")
+                treeNode.childNode(withName: "canopy")?.removeAction(forKey: "sway")
                 treeNode.run(.sequence([
-                    .rotate(byAngle: ImpactEffects.treeShakeAngle, duration: 0.045),
-                    .rotate(byAngle: -ImpactEffects.treeShakeAngle * 2, duration: 0.07),
-                    .rotate(byAngle: ImpactEffects.treeShakeAngle, duration: 0.045)
-                ]).eased(.easeInEaseOut), withKey: "treeShake")
+                    .group([
+                        .moveBy(x: impactDirection.dx * 3, y: impactDirection.dy * 3, duration: 0.05),
+                        .rotate(byAngle: atan2(impactDirection.dx, impactDirection.dy) * ImpactEffects.treeShakeAngle, duration: 0.05)
+                    ]).eased(.easeOut),
+                    .group([
+                        .moveBy(x: -impactDirection.dx * 3, y: -impactDirection.dy * 3, duration: 0.11),
+                        .rotate(byAngle: -atan2(impactDirection.dx, impactDirection.dy) * ImpactEffects.treeShakeAngle, duration: 0.11)
+                    ]).eased(.easeInEaseOut)
+                ]), withKey: "treeShake")
+                treeNode.run(.sequence([
+                    .wait(forDuration: 0.16),
+                    .run { [weak self, weak treeNode] in
+                        guard let self, let canopy = treeNode?.childNode(withName: "canopy") else { return }
+                        self.addTreeSway(to: canopy, species: self.speciesForTree(key: strike.treeKey))
+                    }
+                ]), withKey: "treeSwayResume")
                 if pendingFellAnimationKeys.remove(strike.treeKey) != nil,
                    treeNode.name != "stump"
                 {
+                    isFelling = true
                     let fellPosition = treeNode.position
                     let fellDepth = treeNode.zPosition
                     treeNode.removeFromParent()
@@ -782,14 +819,15 @@ struct ForestSceneView: UIViewRepresentable {
                     treeNodes[strike.treeKey] = stump
                 }
             }
-            for index in 0..<GameData.impactParticleCount {
+            let particleCount = isFelling ? GameData.impactParticleCount + 6 : GameData.impactParticleCount
+            for index in 0..<particleCount {
                 let chip = SKShapeNode(rectOf: CGSize(width: 2.5, height: 2.5), cornerRadius: 0.5)
                 chip.fillColor = UIColor(TimberlineTheme.SceneArt.trunk)
                 chip.strokeColor = .clear
                 chip.position = worldPoint
                 chip.zPosition = -worldPoint.y + 2
-                let angle = CGFloat(index) / CGFloat(GameData.impactParticleCount) * 2 * .pi
-                let distance: CGFloat = 10 + CGFloat(index % 3) * 5
+                let angle = CGFloat(index) / CGFloat(particleCount) * 2 * .pi
+                let distance: CGFloat = isFelling ? 14 + CGFloat(index % 4) * 6 : 10 + CGFloat(index % 3) * 5
                 let destination = CGPoint(x: worldPoint.x + cos(angle) * distance,
                                           y: worldPoint.y + sin(angle) * distance + 8)
                 scene.addChild(chip)

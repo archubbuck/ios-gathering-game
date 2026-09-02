@@ -3,7 +3,7 @@ import Foundation
 /// Tracks the player character's 2D animation state. In the 2D renderer
 /// there are no USDZ skeletal animations — this lightweight controller
 /// simply records the current state so `ForestSceneView.Coordinator` can
-/// drive sprite-level feedback (e.g. the chop-shake action).
+/// drive sprite-level movement and axe-pivot feedback.
 final class SkillerAnimationController {
     enum State: Equatable {
         case idle

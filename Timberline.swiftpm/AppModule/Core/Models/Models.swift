@@ -215,6 +215,7 @@ struct ChopStrikeEvent: Identifiable, Equatable {
     let treeKey: String
     let success: Bool
     let worldPosition: CGPoint
+    let playerPosition: CGPoint
 }
 
 /// Transient HUD toast driven by `GameState.feedbackNotice`.
