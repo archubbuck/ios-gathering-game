@@ -134,9 +134,7 @@ struct ForestSceneView: UIViewRepresentable {
             {
                 lastChopStrikeID = chopStrike.id
                 facePlayerTowardTree(chopStrike, node: playerNode)
-                if chopStrike.success,
-                   let tree = game.worldTrees.first(where: { $0.key == chopStrike.treeKey }),
-                   (tree.logsRemaining <= 0 || tree.isDepleted)
+                if chopStrike.success, chopStrike.willDeplete
                 {
                     pendingFellAnimationKeys.insert(chopStrike.treeKey)
                 }

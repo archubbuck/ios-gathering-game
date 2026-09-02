@@ -460,6 +460,7 @@ final class GameState: NSObject, ObservableObject {
         lastChopStrike = ChopStrikeEvent(
             treeKey: key,
             success: success,
+            willDeplete: success && tree.logsRemaining == 1,
             worldPosition: tree.worldPosition,
             playerPosition: player.position
         )
