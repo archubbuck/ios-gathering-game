@@ -65,6 +65,8 @@ struct ForestSceneView: UIViewRepresentable {
         var treeNodes: [String: SKNode] = [:]
         var groundTiles: [ChunkCoord: SKSpriteNode] = [:]
         var lastChopStrikeID: UUID?
+        var pendingFellAnimationKeys: Set<String> = []
+        var treeSpeciesByKey: [String: TreeSpecies] = [:]
         var lastDustTime: TimeInterval = 0
         var animationController = SkillerAnimationController()
         // Break equal-foot-position ties in favour of the player.
@@ -131,10 +133,16 @@ struct ForestSceneView: UIViewRepresentable {
                chopStrike.id != lastChopStrikeID
             {
                 lastChopStrikeID = chopStrike.id
+                if chopStrike.success,
+                   let tree = game.worldTrees.first(where: { $0.key == chopStrike.treeKey }),
+                   (tree.logsRemaining <= 0 || tree.isDepleted)
+                {
+                    pendingFellAnimationKeys.insert(chopStrike.treeKey)
+                }
                 animationController.playChop()
                 if let node = playerNode {
                     stopMovementAnimation(on: node)
-                    playChopAnimation(on: node, impact: chopStrike.success)
+                    playChopAnimation(on: node, strike: chopStrike)
                     playChopShake(on: node)
                 }
             }
@@ -143,6 +151,9 @@ struct ForestSceneView: UIViewRepresentable {
             let renderRadius = GameData.treeRenderRadius
             let keepRadius = renderRadius + GameData.treeRenderHysteresis
             let playerPos = game.player.position
+            for tree in game.worldTrees {
+                treeSpeciesByKey[tree.key] = tree.species
+            }
 
             let visibleTrees = game.worldTrees.filter { tree in
                 let dx = tree.worldPosition.x - playerPos.x
@@ -172,8 +183,12 @@ struct ForestSceneView: UIViewRepresentable {
                     let isStump = existing.name == "stump"
                     if isStump != isFelled {
                         if isFelled {
+                            if pendingFellAnimationKeys.contains(tree.key) {
+                                existing.position = CGPoint(x: p.x, y: -p.y)
+                                existing.zPosition = p.y
+                                continue
+                            }
                             existing.removeFromParent()
-                            animateTreeFelling(existing, species: tree.species)
                         } else {
                             existing.removeFromParent()
                         }
@@ -536,6 +551,17 @@ struct ForestSceneView: UIViewRepresentable {
             axeEdge.zPosition = playerLayer(2)
             axeHandle.addChild(axeEdge)
 
+            let upperBody = SKNode()
+            upperBody.name = "upperBody"
+            for piece in [body, shirtFacet, tunic, tunicFacet, beltBand, beltBuckle,
+                          farSleeve, farWrap, nearSleeve, nearBracer, nearHand,
+                          scarfTail, scarfBand, neck, hairBack, head, faceShadow,
+                          nose, eye, hairFront, axeHandle] {
+                piece.removeFromParent()
+                upperBody.addChild(piece)
+            }
+            root.addChild(upperBody)
+
             return root
         }
 
@@ -668,7 +694,7 @@ struct ForestSceneView: UIViewRepresentable {
                 ])
                 limb.run(.repeatForever(step), withKey: "walk")
             }
-            node.childNode(withName: "body")?.run(
+            node.childNode(withName: "upperBody")?.run(
                 .repeatForever(.sequence([
                     .moveBy(x: 0, y: GameData.walkBobHeight, duration: 0.18),
                     .moveBy(x: 0, y: -GameData.walkBobHeight, duration: 0.18)
@@ -684,7 +710,10 @@ struct ForestSceneView: UIViewRepresentable {
                 limb.removeAction(forKey: "walk")
                 limb.position.y = baseY
             }
-            node.childNode(withName: "body")?.removeAction(forKey: "walkBob")
+            if let upperBody = node.childNode(withName: "upperBody") {
+                upperBody.removeAction(forKey: "walkBob")
+                upperBody.position = .zero
+            }
             if animationController.currentState != .chopping,
                let head = node.childNode(withName: "head") {
                 head.removeAction(forKey: "idle")
@@ -695,7 +724,7 @@ struct ForestSceneView: UIViewRepresentable {
             }
         }
 
-        private func playChopAnimation(on node: SKNode, impact: Bool) {
+        private func playChopAnimation(on node: SKNode, strike: ChopStrikeEvent) {
             guard let axe = node.childNode(withName: "axeHandle") else { return }
             axe.removeAction(forKey: "chop")
             axe.zRotation = axeBaseRotation
@@ -706,9 +735,9 @@ struct ForestSceneView: UIViewRepresentable {
                     .rotate(byAngle: -0.7, duration: windup * 0.65).eased(.easeInEaseOut),
                     .rotate(byAngle: 0.95, duration: windup * 0.35).eased(.easeInEaseOut),
                     .wait(forDuration: GameData.chopImpactPause),
-                    .run { [weak self, weak node] in
-                        guard impact, let self, let node else { return }
-                        self.playImpactEffects(on: node)
+                    .run { [weak self] in
+                        guard strike.success, let self else { return }
+                        self.playImpactEffects(strike: strike)
                     },
                     .rotate(byAngle: -0.25, duration: recovery).eased(.easeOut)
                 ]),
@@ -726,25 +755,39 @@ struct ForestSceneView: UIViewRepresentable {
             node.run(shake, withKey: "chopShake")
         }
 
-        private func playImpactEffects(on player: SKNode) {
-            let worldPoint = player.convert(ImpactEffects.contactPoint, to: scene ?? player)
+        private func playImpactEffects(strike: ChopStrikeEvent) {
+            let worldPoint = CGPoint(x: strike.worldPosition.x, y: -strike.worldPosition.y)
             guard let scene else { return }
             Haptics.chop()
-            let strike = gameTreeNode(near: worldPoint)
-            if let strike {
-                strike.removeAction(forKey: "treeShake")
-                strike.run(.sequence([
+            if let treeNode = treeNodes[strike.treeKey] {
+                treeNode.removeAction(forKey: "treeShake")
+                treeNode.run(.sequence([
                     .rotate(byAngle: ImpactEffects.treeShakeAngle, duration: 0.045),
                     .rotate(byAngle: -ImpactEffects.treeShakeAngle * 2, duration: 0.07),
                     .rotate(byAngle: ImpactEffects.treeShakeAngle, duration: 0.045)
                 ]).eased(.easeInEaseOut), withKey: "treeShake")
+                if pendingFellAnimationKeys.remove(strike.treeKey) != nil,
+                   treeNode.name != "stump"
+                {
+                    let fellPosition = treeNode.position
+                    let fellDepth = treeNode.zPosition
+                    treeNode.removeFromParent()
+                    treeNodes.removeValue(forKey: strike.treeKey)
+                    animateTreeFelling(treeNode, species: speciesForTree(key: strike.treeKey))
+
+                    let stump = makeTreeNode(species: speciesForTree(key: strike.treeKey), isFelled: true)
+                    stump.position = fellPosition
+                    stump.zPosition = fellDepth
+                    scene.addChild(stump)
+                    treeNodes[strike.treeKey] = stump
+                }
             }
             for index in 0..<GameData.impactParticleCount {
                 let chip = SKShapeNode(rectOf: CGSize(width: 2.5, height: 2.5), cornerRadius: 0.5)
                 chip.fillColor = UIColor(TimberlineTheme.SceneArt.trunk)
                 chip.strokeColor = .clear
                 chip.position = worldPoint
-                chip.zPosition = worldPoint.y + 2
+                chip.zPosition = -worldPoint.y + 2
                 let angle = CGFloat(index) / CGFloat(GameData.impactParticleCount) * 2 * .pi
                 let distance: CGFloat = 10 + CGFloat(index % 3) * 5
                 let destination = CGPoint(x: worldPoint.x + cos(angle) * distance,
@@ -764,7 +807,7 @@ struct ForestSceneView: UIViewRepresentable {
             label.fontSize = 11
             label.fontColor = UIColor(TimberlineTheme.gold)
             label.position = CGPoint(x: worldPoint.x, y: worldPoint.y + 8)
-            label.zPosition = worldPoint.y + 3
+            label.zPosition = -worldPoint.y + 3
             scene.addChild(label)
             label.run(.sequence([
                 .moveBy(x: 0, y: 22, duration: 0.48).eased(.easeOut),
@@ -773,8 +816,8 @@ struct ForestSceneView: UIViewRepresentable {
             ]))
             // A bundled impact recording can be added later without making
             // the scene depend on a missing placeholder asset.
-            if Bundle.module.url(forResource: "axe-impact", withExtension: "wav") != nil {
-                scene.run(.playSoundFileNamed("axe-impact.wav", waitForCompletion: false))
+            if Bundle.module.url(forResource: "axe-impact", withExtension: "wav", subdirectory: "Audio") != nil {
+                scene.run(.playSoundFileNamed("Audio/axe-impact.wav", waitForCompletion: false))
             }
         }
 
@@ -787,7 +830,7 @@ struct ForestSceneView: UIViewRepresentable {
             puff.fillColor = UIColor(TimberlineTheme.SceneArt.dirt).withAlphaComponent(0.45)
             puff.strokeColor = .clear
             puff.position = CGPoint(x: position.x, y: position.y + 2)
-            puff.zPosition = position.y - 1
+            puff.zPosition = -position.y - 1
             scene.addChild(puff)
             puff.run(.sequence([
                 .group([
@@ -798,11 +841,8 @@ struct ForestSceneView: UIViewRepresentable {
             ]))
         }
 
-        private func gameTreeNode(near point: CGPoint) -> SKNode? {
-            treeNodes.values.min {
-                hypot($0.position.x - point.x, $0.position.y - point.y) <
-                hypot($1.position.x - point.x, $1.position.y - point.y)
-            }
+        private func speciesForTree(key: String) -> TreeSpecies {
+            treeSpeciesByKey[key] ?? .oak
         }
 
         private func addTreeSway(to canopy: SKNode, species: TreeSpecies) {
