@@ -1,6 +1,7 @@
 import SpriteKit
 import SwiftUI
 import UIKit
+import QuartzCore
 
 private extension SKAction {
     func eased(_ mode: SKActionTimingMode) -> SKAction {
@@ -718,9 +719,9 @@ struct ForestSceneView: UIViewRepresentable {
         private func playChopShake(on node: SKNode) {
             node.removeAction(forKey: "chopShake")
             let shake = SKAction.sequence([
-                SKAction.moveBy(x: 3, y: 0, duration: 0.05),
-                SKAction.moveBy(x: -6, y: 0, duration: 0.05),
-                SKAction.moveBy(x: 3, y: 0, duration: 0.05),
+                SKAction.moveBy(x: GameData.chopRecoilDistance, y: 0, duration: 0.05),
+                SKAction.moveBy(x: -GameData.chopRecoilDistance * 2, y: 0, duration: 0.05),
+                SKAction.moveBy(x: GameData.chopRecoilDistance, y: 0, duration: 0.05),
             ])
             node.run(shake, withKey: "chopShake")
         }
@@ -728,6 +729,7 @@ struct ForestSceneView: UIViewRepresentable {
         private func playImpactEffects(on player: SKNode) {
             let worldPoint = player.convert(ImpactEffects.contactPoint, to: scene ?? player)
             guard let scene else { return }
+            Haptics.chop()
             let strike = gameTreeNode(near: worldPoint)
             if let strike {
                 strike.removeAction(forKey: "treeShake")
@@ -760,7 +762,7 @@ struct ForestSceneView: UIViewRepresentable {
             let label = SKLabelNode(text: "+1 log")
             label.fontName = "AvenirNext-Bold"
             label.fontSize = 11
-            label.fontColor = UIColor(TimberlineTheme.SceneArt.gold)
+            label.fontColor = UIColor(TimberlineTheme.gold)
             label.position = CGPoint(x: worldPoint.x, y: worldPoint.y + 8)
             label.zPosition = worldPoint.y + 3
             scene.addChild(label)

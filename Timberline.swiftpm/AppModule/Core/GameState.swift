@@ -459,8 +459,6 @@ final class GameState: NSObject, ObservableObject {
         addToPack(tree.species)
         grantXP(def.xpPerLog)
         recordEvent(.chop, "You get some \(def.species.displayName.lowercased()) logs.")
-        Haptics.chop()
-
         tree.logsRemaining -= 1
         if tree.logsRemaining <= 0 {
             let deadline = Date().addingTimeInterval(def.respawnSeconds)
