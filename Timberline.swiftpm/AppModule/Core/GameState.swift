@@ -56,6 +56,7 @@ final class GameState: NSObject, ObservableObject {
     private var lastUpdateTime: CFTimeInterval = 0
     private var lastChopTickTime: CFTimeInterval = 0
     private var lastAutoSaveTime: CFTimeInterval = 0
+    private var pendingChopResolution: Task<Void, Never>?
 
     // MARK: Derived
 
@@ -170,6 +171,7 @@ final class GameState: NSObject, ObservableObject {
 
     deinit {
         updateLink?.invalidate()
+        pendingChopResolution?.cancel()
     }
 
     // MARK: Per-frame update (movement + proximity chopping)
@@ -321,7 +323,8 @@ final class GameState: NSObject, ObservableObject {
                 return
             }
             // Run chop ticks on interval.
-            if now - lastChopTickTime >= GameData.tickInterval {
+            if now - lastChopTickTime >= GameData.tickInterval,
+               pendingChopResolution == nil {
                 lastChopTickTime = now
                 performChopTick()
             }
@@ -414,6 +417,8 @@ final class GameState: NSObject, ObservableObject {
     }
 
     func stopChopping() {
+        pendingChopResolution?.cancel()
+        pendingChopResolution = nil
         activeChopTreeKey = nil
         if player.animation == .chopping {
             player.animation = .idle
@@ -450,11 +455,38 @@ final class GameState: NSObject, ObservableObject {
         let axe = GameData.axe(for: equippedAxe)
         let chance = ChopMath.successChance(level: effectiveLevel, tree: def, axe: axe)
         let success = Double.random(in: 0..<1) < chance
-        // Published on every real attempt (hit or miss) so the axe visibly
-        // swings every tick, but impact feedback (wood chips/tree shake)
-        // only fires when `success` is true.
-        lastChopStrike = ChopStrikeEvent(treeKey: key, success: success, worldPosition: tree.worldPosition)
-        guard success else { return }
+        // Publish the attempt immediately so the renderer can begin the
+        // wind-up. The actual reward is resolved at the axe contact frame.
+        lastChopStrike = ChopStrikeEvent(
+            treeKey: key,
+            success: success,
+            willDeplete: success && tree.logsRemaining == 1,
+            worldPosition: tree.worldPosition,
+            playerPosition: player.position
+        )
+        pendingChopResolution = Task { [weak self] in
+            let delay = UInt64(GameData.chopImpactDelay * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            await self?.resolveChopTick(key: key, success: success)
+        }
+    }
+
+    private func resolveChopTick(key: String, success: Bool) {
+        pendingChopResolution = nil
+        guard success,
+              let idx = worldTrees.firstIndex(where: { $0.key == key }),
+              activeChopTreeKey == key
+        else { return }
+
+        var tree = worldTrees[idx]
+        guard !tree.isDepleted, tree.logsRemaining > 0 else { return }
+        guard !packIsFull else {
+            feedbackNotice = FeedbackNotice(kind: .packFull)
+            stopChopping()
+            return
+        }
+        let def = GameData.tree(for: tree.species)
 
         addToPack(tree.species)
         grantXP(def.xpPerLog)
